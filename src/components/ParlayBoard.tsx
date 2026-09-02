@@ -1,22 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  STAKE,
-  formatAmericanOdds,
-  formatMoney,
-  formatProbability,
-  parseAmericanOdds,
-  summarizeParlay,
-} from "@/lib/odds";
+import { useState } from "react";
+import AddLegView from "@/components/AddLegView";
+import LegCard from "@/components/LegCard";
+import SummaryCard from "@/components/SummaryCard";
+import { formatAmericanOdds, summarizeParlay } from "@/lib/odds";
 import type { Leg } from "@/lib/store";
 
 type League = {
   name: string;
   season: number;
   week: number;
-  payer: string;
-  roster: readonly string[];
+  locksAt: string;
+  payer: string | null;
+  roster: string[];
 };
 
 export default function ParlayBoard({
@@ -27,33 +24,44 @@ export default function ParlayBoard({
   initialLegs: Leg[];
 }) {
   const [legs, setLegs] = useState<Leg[]>(initialLegs);
-  const [formOpen, setFormOpen] = useState(initialLegs.length === 0);
-  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Leg | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submitted = useMemo(() => legs.map((leg) => leg.name), [legs]);
-  const waiting = league.roster.filter((name) => !submitted.includes(name));
+  const total = league.roster.length;
+  const submittedNames = legs.map((leg) => leg.name);
+  const waiting = league.roster.filter(
+    (name) => !submittedNames.includes(name),
+  );
   const summary = summarizeParlay(legs.map((leg) => leg.odds));
+  const locked = legs.length === total;
 
-  async function addLeg(name: string, pick: string, odds: number) {
+  async function submitLeg(name: string, pick: string, odds: number) {
     setPending(true);
     setError(null);
     try {
-      const res = await fetch("/api/legs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, pick, odds }),
-      });
+      const res = editing
+        ? await fetch(`/api/legs/${editing.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pick, odds }),
+          })
+        : await fetch("/api/legs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, pick, odds }),
+          });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Something went wrong.");
         return false;
       }
-      setLegs((current) => {
-        const rest = current.filter((leg) => leg.id !== data.leg.id);
-        return [...rest, data.leg];
-      });
-      setFormOpen(false);
+      setLegs((current) => [
+        ...current.filter((leg) => leg.id !== data.leg.id),
+        data.leg,
+      ]);
+      closeForm();
       return true;
     } catch {
       setError("Could not reach the server.");
@@ -73,308 +81,204 @@ export default function ParlayBoard({
     }
   }
 
+  function openForm(leg: Leg | null) {
+    setEditing(leg);
+    setFormOpen(true);
+    setError(null);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditing(null);
+  }
+
+  const oneLegNote =
+    legs.length === 1 ? `Just ${legs[0].name} so far — the parlay is their leg.` : undefined;
+  const emptyNote = legs.length === 0 ? "Nobody's in yet. First leg sets the line." : undefined;
+
+  const cta = locked
+    ? "Change a leg"
+    : legs.length === 0
+      ? "Be first — add your leg"
+      : "Add your leg";
+
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">{league.name}</h1>
-        <p className="text-sm text-muted tabular">
-          Week {league.week} · {league.season}
-        </p>
-      </header>
+    <>
+      <div className="flex min-h-dvh flex-col">
+        <header className="sticky top-0 z-10 border-b border-hairline bg-app px-5 pt-[22px] pb-3.5 lg:px-10 lg:py-[22px]">
+          <div className="mx-auto flex w-full max-w-[1280px] items-baseline justify-between">
+            <div className="flex items-baseline gap-4">
+              <span className="text-[19px] font-bold tracking-[-0.02em] text-ink lg:text-[22px]">
+                {league.name}
+              </span>
+              <span className="hidden font-mono text-[13px] text-muted lg:inline">
+                Week {league.week} · {league.season} Season
+              </span>
+            </div>
+            <span className="font-mono text-xs text-muted lg:hidden">
+              Week {league.week} · {league.season}
+            </span>
+            <button
+              type="button"
+              onClick={() => openForm(null)}
+              className="hidden h-[42px] rounded-xl bg-accent px-[22px] text-[15px] font-semibold text-app transition-opacity hover:opacity-90 lg:block"
+            >
+              {cta}
+            </button>
+          </div>
+        </header>
 
-      <SummaryCard summary={summary} />
+        <div className="mx-auto grid w-full max-w-[1280px] flex-1 items-start gap-[18px] px-5 pt-[18px] pb-[130px] lg:grid-cols-[420px_1fr] lg:gap-8 lg:px-10 lg:pt-8 lg:pb-11">
+          <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[104px]">
+            {locked && (
+              <p className="rounded-xl border border-[var(--accent-28)] bg-[var(--accent-11)] px-4 py-3 font-mono text-[11px] tracking-[0.12em] text-accent-soft uppercase">
+                Locked and loaded · {total} of {total}
+              </p>
+            )}
 
-      <p className="text-sm text-muted">
-        <span className="text-ink font-medium">{league.payer}</span> is paying
-        this week
-        <span className="text-muted"> · last place, Week {league.week - 1}</span>
-      </p>
+            <SummaryCard
+              summary={summary}
+              locked={locked}
+              note={emptyNote ?? oneLegNote}
+            />
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-muted tabular">
-            {legs.length} of {league.roster.length} legs in
-          </h2>
-          <div className="flex gap-1">
-            {league.roster.map((name, i) => (
-              <span
-                key={name}
-                className={`h-1.5 w-4 rounded-full ${
-                  i < legs.length ? "bg-accent" : "bg-line"
-                }`}
-              />
-            ))}
+            {league.payer && (
+              <div className="flex items-center gap-2.5 px-0.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#20252a] font-mono text-[11px] font-semibold text-[#b9c2c8]">
+                  {league.payer.charAt(0)}
+                </span>
+                <div className="flex flex-col gap-px">
+                  <span className="text-sm text-ink-3">
+                    {league.payer}
+                    {locked ? "'s already paid up" : "'s tab this week"}
+                  </span>
+                  <span className="font-mono text-[11px] text-muted-3">
+                    Last place, Week {league.week - 1}. Rough.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p
+                role="alert"
+                className="text-[13px]"
+                style={{ color: "var(--danger-text)" }}
+              >
+                {error}
+              </p>
+            )}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-[18px]">
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-baseline justify-between">
+                <span className="font-mono text-xs tracking-[0.1em] text-muted uppercase">
+                  {legs.length} of {total} in
+                </span>
+                <span className="font-mono text-xs text-muted-3">
+                  {locked
+                    ? "all in"
+                    : legs.length === 0
+                      ? league.locksAt
+                      : `${waiting.length} to go`}
+                </span>
+              </div>
+              <div className="flex gap-[5px]">
+                {league.roster.map((name, i) => (
+                  <span
+                    key={name}
+                    className="h-[5px] flex-1 rounded-[3px]"
+                    style={{
+                      background:
+                        i < legs.length ? "var(--accent)" : "var(--track)",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {legs.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {legs.map((leg) => (
+                  <LegCard
+                    key={leg.id}
+                    leg={leg}
+                    onEdit={() => openForm(leg)}
+                    onRemove={() => removeLeg(leg.id)}
+                  />
+                ))}
+              </ul>
+            )}
+
+            {waiting.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <h2 className="pl-0.5 font-mono text-[11px] tracking-[0.12em] text-faint uppercase">
+                  {legs.length === 0
+                    ? `Waiting on all ${total}`
+                    : "Still waiting on"}
+                </h2>
+                {legs.length === 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {waiting.map((name) => (
+                      <span
+                        key={name}
+                        className="rounded-full border border-dashed border-dash px-[15px] py-2.5 text-sm text-muted-2"
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {waiting.map((name) => (
+                      <li
+                        key={name}
+                        className="flex items-center justify-between rounded-[14px] border border-dashed border-dash px-3.5 py-3"
+                      >
+                        <span className="text-[15px] text-muted-2">{name}</span>
+                        <span className="font-mono text-xs text-faint-2">
+                          nudge
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {locked && summary && (
+              <p className="font-mono text-xs text-muted-3">
+                Final ticket: {formatAmericanOdds(summary.american)} across{" "}
+                {total} legs.
+              </p>
+            )}
           </div>
         </div>
 
-        <ul className="flex flex-col gap-2">
-          {legs.map((leg) => (
-            <li
-              key={leg.id}
-              className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium tracking-wide text-muted uppercase">
-                  {leg.name}
-                </p>
-                <p className="mt-0.5 text-[15px] leading-snug break-words">
-                  {leg.pick}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={`tabular rounded-md px-2 py-1 text-sm font-semibold ${
-                    leg.odds > 0
-                      ? "bg-accent-dim text-accent"
-                      : "bg-surface-raised text-negative"
-                  }`}
-                >
-                  {formatAmericanOdds(leg.odds)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeLeg(leg.id)}
-                  aria-label={`Remove ${leg.name}'s leg`}
-                  className="rounded-md px-2 py-1 text-muted transition-colors hover:bg-surface-raised hover:text-ink"
-                >
-                  ×
-                </button>
-              </div>
-            </li>
-          ))}
-
-          {waiting.map((name) => (
-            <li
-              key={name}
-              className="flex items-center justify-between rounded-xl border border-dashed border-line px-4 py-3"
-            >
-              <span className="text-xs font-medium tracking-wide text-muted uppercase">
-                {name}
-              </span>
-              <span className="text-xs text-muted">waiting</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {error && (
-        <p role="alert" className="text-sm text-negative">
-          {error}
-        </p>
-      )}
-
-      {formOpen ? (
-        <AddLegForm
-          roster={league.roster}
-          existingOdds={legs.map((leg) => leg.odds)}
-          submitted={submitted}
-          pending={pending}
-          onCancel={legs.length > 0 ? () => setFormOpen(false) : undefined}
-          onSubmit={addLeg}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setFormOpen(true)}
-          className="sticky bottom-4 rounded-xl bg-accent px-4 py-3.5 text-[15px] font-semibold text-bg transition-opacity hover:opacity-90"
-        >
-          Add your leg
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SummaryCard({
-  summary,
-}: {
-  summary: ReturnType<typeof summarizeParlay>;
-}) {
-  return (
-    <section className="rounded-2xl border border-line bg-surface px-5 py-6 text-center">
-      <p className="text-xs font-medium tracking-widest text-muted uppercase">
-        The parlay
-      </p>
-      <p
-        className={`tabular mt-2 text-5xl font-bold tracking-tight ${
-          summary ? "text-accent" : "text-muted"
-        }`}
-      >
-        {summary ? formatAmericanOdds(summary.american) : "--"}
-      </p>
-      <dl className="mt-5 grid grid-cols-3 gap-2 border-t border-line pt-4">
-        <Stat label="Decimal" value={summary ? summary.decimal.toFixed(2) : "—"} />
-        <Stat
-          label="Win chance"
-          value={summary ? formatProbability(summary.impliedProbability) : "—"}
-        />
-        <Stat
-          label={`$${STAKE} pays`}
-          value={summary ? formatMoney(summary.payout) : "—"}
-        />
-      </dl>
-    </section>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[11px] tracking-wide text-muted uppercase">{label}</dt>
-      <dd className="tabular mt-1 text-sm font-semibold">{value}</dd>
-    </div>
-  );
-}
-
-function AddLegForm({
-  roster,
-  submitted,
-  existingOdds,
-  pending,
-  onCancel,
-  onSubmit,
-}: {
-  roster: readonly string[];
-  submitted: string[];
-  existingOdds: number[];
-  pending: boolean;
-  onCancel?: () => void;
-  onSubmit: (name: string, pick: string, odds: number) => Promise<boolean>;
-}) {
-  const [name, setName] = useState("");
-  const [pick, setPick] = useState("");
-  const [oddsInput, setOddsInput] = useState("");
-  const [touched, setTouched] = useState(false);
-
-  const odds = parseAmericanOdds(oddsInput);
-  const oddsInvalid = touched && oddsInput.trim() !== "" && odds === null;
-
-  const before = summarizeParlay(existingOdds);
-  const after = odds === null ? null : summarizeParlay([...existingOdds, odds]);
-
-  const canSubmit =
-    name !== "" && pick.trim() !== "" && odds !== null && !pending;
-
-  return (
-    <form
-      className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        if (!canSubmit) {
-          setTouched(true);
-          return;
-        }
-        const ok = await onSubmit(name, pick, odds);
-        if (ok) {
-          setName("");
-          setPick("");
-          setOddsInput("");
-          setTouched(false);
-        }
-      }}
-    >
-      <Field label="Who are you?">
-        <select
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2.5 text-[15px]"
-        >
-          <option value="">Pick your name</option>
-          {roster.map((option) => (
-            <option key={option} value={option}>
-              {option}
-              {submitted.includes(option) ? " (replaces your leg)" : ""}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="Your leg">
-        <textarea
-          value={pick}
-          onChange={(event) => setPick(event.target.value)}
-          rows={2}
-          placeholder="Ja'Marr Chase over 78.5 receiving yards"
-          className="w-full resize-none rounded-lg border border-line bg-surface-raised px-3 py-2.5 text-[15px] placeholder:text-muted"
-        />
-      </Field>
-
-      <Field
-        label="Odds"
-        hint={oddsInvalid ? "Use American odds, like -115 or +250." : undefined}
-      >
-        <input
-          value={oddsInput}
-          onChange={(event) => setOddsInput(event.target.value)}
-          onBlur={() => setTouched(true)}
-          inputMode="text"
-          placeholder="-115"
-          aria-invalid={oddsInvalid}
-          className={`tabular w-full rounded-lg border bg-surface-raised px-3 py-2.5 text-[15px] placeholder:text-muted ${
-            oddsInvalid ? "border-negative" : "border-line"
-          }`}
-        />
-      </Field>
-
-      {after && (
-        <p className="text-sm text-muted">
-          This takes the parlay{" "}
-          {before ? (
-            <>
-              from{" "}
-              <span className="tabular text-ink">
-                {formatAmericanOdds(before.american)}
-              </span>{" "}
-              to{" "}
-            </>
-          ) : (
-            "to "
-          )}
-          <span className="tabular font-semibold text-accent">
-            {formatAmericanOdds(after.american)}
-          </span>
-          .
-        </p>
-      )}
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="flex-1 rounded-xl bg-accent px-4 py-3 text-[15px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          {pending ? "Submitting…" : "Submit leg"}
-        </button>
-        {onCancel && (
+        <div className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-app from-[62%] to-transparent px-5 pt-[18px] pb-6 lg:hidden">
           <button
             type="button"
-            onClick={onCancel}
-            className="rounded-xl border border-line px-4 py-3 text-[15px] text-muted"
+            onClick={() => openForm(null)}
+            className="flex h-[54px] w-full items-center justify-center rounded-2xl bg-accent text-base font-semibold text-app transition-opacity active:opacity-90"
           >
-            Cancel
+            {cta}
           </button>
-        )}
+        </div>
       </div>
-    </form>
-  );
-}
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium tracking-wide text-muted uppercase">
-        {label}
-      </span>
-      {children}
-      {hint && <span className="text-xs text-negative">{hint}</span>}
-    </label>
+      {formOpen && (
+        <AddLegView
+          roster={league.roster}
+          submittedNames={submittedNames}
+          legs={legs}
+          week={league.week}
+          editing={editing}
+          pending={pending}
+          onCancel={closeForm}
+          onSubmit={submitLeg}
+        />
+      )}
+    </>
   );
 }

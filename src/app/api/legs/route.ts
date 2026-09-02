@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     odds?: unknown;
   };
 
-  if (typeof name !== "string" || !LEAGUE.roster.includes(name as never)) {
+  if (typeof name !== "string" || !LEAGUE.roster.includes(name)) {
     return NextResponse.json(
       { error: "Pick a name from the league roster." },
       { status: 400 },

@@ -67,7 +67,13 @@ export function formatMoney(amount: number): string {
   });
 }
 
+/**
+ * A 14-leg parlay routinely lands below 0.01%, where a percentage rounds to a
+ * useless "0.00%" — fall back to odds-against, which stays readable.
+ */
 export function formatProbability(p: number): string {
   const pct = p * 100;
-  return `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}%`;
+  if (pct >= 1) return `${pct.toFixed(1)}%`;
+  if (pct >= 0.1) return `${pct.toFixed(2)}%`;
+  return `1 in ${Math.round(1 / p).toLocaleString("en-US")}`;
 }

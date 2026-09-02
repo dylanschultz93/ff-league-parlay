@@ -1,27 +1,82 @@
 @import "tailwindcss";
 
+/*
+ * Tokens lifted from the Claude Design bundle in prototype/.
+ * Hex values and oklch() triples are taken verbatim from the artboards.
+ */
 :root {
-  --bg: #0b0e14;
-  --surface: #141924;
-  --surface-raised: #1c2230;
-  --border: #262d3d;
-  --text: #e8ecf4;
-  --text-muted: #8b93a7;
-  --accent: #4ade80;
-  --accent-dim: #16342a;
-  --negative: #f0a675;
+  --app-bg: #0a0c0d;
+  --card: #14171a;
+  --card-border: #262b30;
+  --panel: #111417;
+  --panel-border: #1f2429;
+  --panel-divider: #1b2024;
+  --hairline: #191d21;
+  --input-border: #2a3036;
+  --track: #242a2f;
+  --dash: #23282d;
+
+  --ink: #edf1f3;
+  --ink-2: #e6ebee;
+  --ink-3: #dce2e6;
+  --muted: #838c94;
+  --muted-2: #79828a;
+  --muted-3: #6e777e;
+  --faint: #5f686f;
+  --faint-2: #4e565c;
+  --dim: #394046;
+
+  --accent: oklch(0.86 0.19 132);
+  --accent-bright: oklch(0.88 0.19 132);
+  --accent-soft: oklch(0.86 0.12 132);
+  --accent-11: oklch(0.86 0.19 132 / 0.11);
+  --accent-12: oklch(0.86 0.19 132 / 0.12);
+  --accent-14: oklch(0.86 0.19 132 / 0.14);
+  --accent-25: oklch(0.86 0.19 132 / 0.25);
+  --accent-28: oklch(0.86 0.19 132 / 0.28);
+  --accent-50: oklch(0.86 0.19 132 / 0.5);
+
+  /* Negative odds read cool rather than alarming. */
+  --cool: oklch(0.76 0.1 245);
+  --cool-13: oklch(0.76 0.1 245 / 0.13);
+
+  --danger: oklch(0.72 0.15 30);
+  --danger-text: oklch(0.75 0.14 30);
+  --danger-border: oklch(0.68 0.17 30 / 0.65);
+  --danger-bg: oklch(0.62 0.17 30 / 0.08);
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-line: var(--border);
-  --color-ink: var(--text);
-  --color-muted: var(--text-muted);
+  --color-app: var(--app-bg);
+  --color-card: var(--card);
+  --color-card-line: var(--card-border);
+  --color-panel: var(--panel);
+  --color-panel-line: var(--panel-border);
+  --color-panel-divider: var(--panel-divider);
+  --color-hairline: var(--hairline);
+  --color-input-line: var(--input-border);
+  --color-track: var(--track);
+  --color-dash: var(--dash);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-muted-3: var(--muted-3);
+  --color-faint: var(--faint);
+  --color-faint-2: var(--faint-2);
+  --color-dim: var(--dim);
+
   --color-accent: var(--accent);
-  --color-accent-dim: var(--accent-dim);
-  --color-negative: var(--negative);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-soft: var(--accent-soft);
+  --color-cool: var(--cool);
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+
+  --font-sans: var(--font-archivo), Helvetica, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 html {
@@ -29,12 +84,27 @@ html {
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--app-bg);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
 
+/* Odds, money, and labels all sit in columns — keep the digits aligned. */
 .tabular {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+}
+
+.label {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+/* Length-stepped parlay headline (see headlineSize in SummaryCard). */
+@media (min-width: 64rem) {
+  [style*="--headline-lg"] {
+    font-size: var(--headline-lg) !important;
+  }
 }

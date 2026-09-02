@@ -1,26 +1,33 @@
 /**
- * League configuration. Placeholder values for the walking skeleton — this moves
- * into the database (or an env-backed config) once storage is wired up.
+ * League configuration. Still hardcoded — moves into the database along with
+ * the legs once storage is wired up.
  */
 
 export const LEAGUE = {
   name: "Parlay Pool",
   season: 2025,
   week: 3,
-  /** Lowest scorer from the prior week — they put up the $10. */
-  payer: "Kyle",
+  /** Copy for the submission deadline. Cosmetic — nothing enforces it yet. */
+  locksAt: "locks Sunday 1:00",
+  /**
+   * Lowest scorer from the prior week — they put up the $10. Set to null when
+   * it isn't settled yet and the callout hides itself.
+   */
+  payer: null as string | null,
   roster: [
     "Dylan",
-    "Kyle",
-    "Marcus",
-    "Ben",
-    "Tyler",
-    "Nate",
-    "Sam",
     "Chris",
-    "Alex",
-    "Jordan",
+    "Chat",
+    "Rush",
+    "Patric",
+    "Sandia",
+    "Chou",
+    "Mojo",
+    "Parth",
+    "Nick",
+    "Tomas",
+    "Alec",
+    "Harrison",
+    "DK",
   ],
-} as const;
-
-export type RosterName = (typeof LEAGUE)["roster"][number];
+};
