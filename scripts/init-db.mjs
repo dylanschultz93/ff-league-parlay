@@ -8,6 +8,7 @@ import nextEnv from "@next/env";
 nextEnv.loadEnvConfig(process.cwd(), true);
 
 const KEYS = [
+  "DATABASE_URL_OVERRIDE",
   "DATABASE_URL",
   "POSTGRES_URL",
   "STORAGE_URL",

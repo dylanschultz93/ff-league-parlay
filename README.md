@@ -50,6 +50,11 @@ injects the connection string as an environment variable. `src/lib/db.ts` accept
 any of the usual names (`DATABASE_URL`, `POSTGRES_URL`, `STORAGE_URL`, …) since
 the integration names it after the prefix chosen at install time.
 
+Development and Preview run against a separate `parlay_dev` database via
+`DATABASE_URL_OVERRIDE`, which is set only on those two environments. Production
+has no override and uses the integration's `DATABASE_URL` (`neondb`), so local
+and preview work cannot touch the league's data.
+
 Rows carry `season` and `week`, and every query is scoped to the current week
 from `src/lib/league.ts`. Past weeks accumulate untouched, ready for the history
 screen. A unique index on `(season, week, lower(name))` enforces one leg per
