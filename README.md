@@ -7,6 +7,9 @@ payout on a $10 ticket. Whoever finished last the prior week puts up the $10.
 
 Mobile-first — people submit from their phones.
 
+Contributing? Read [CONTRIBUTING.md](CONTRIBUTING.md) first — `main` is
+protected and there's one sharp edge around the shared database.
+
 ## Running it
 
 ```bash
