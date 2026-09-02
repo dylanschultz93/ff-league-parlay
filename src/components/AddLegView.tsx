@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   STAKE,
   formatAmericanOdds,
@@ -34,6 +34,12 @@ export default function AddLegView({
   onCancel: () => void;
   onSubmit: (name: string, pick: string, odds: number) => Promise<boolean>;
 }) {
+  // The roster is stored in league order; the picker is easier to scan sorted.
+  const sortedRoster = useMemo(
+    () => [...roster].sort((a, b) => a.localeCompare(b)),
+    [roster],
+  );
+
   const [name, setName] = useState(editing?.name ?? "");
   const [pick, setPick] = useState(editing?.pick ?? "");
   const [oddsInput, setOddsInput] = useState(
@@ -92,7 +98,7 @@ export default function AddLegView({
                 <option value="" disabled>
                   Pick your name
                 </option>
-                {roster.map((option) => (
+                {sortedRoster.map((option) => (
                   <option key={option} value={option}>
                     {option}
                     {!editing && submittedNames.includes(option)
