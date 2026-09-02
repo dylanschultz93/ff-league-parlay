@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   STAKE,
   formatAmericanOdds,
@@ -8,6 +8,7 @@ import {
   parseAmericanOdds,
   summarizeParlay,
 } from "@/lib/odds";
+import NamePicker from "@/components/NamePicker";
 import type { Leg } from "@/lib/store";
 
 /**
@@ -16,8 +17,7 @@ import type { Leg } from "@/lib/store";
  * the "what this does" comparison.
  */
 export default function AddLegView({
-  roster,
-  submittedNames,
+  availableNames,
   legs,
   week,
   editing,
@@ -25,8 +25,8 @@ export default function AddLegView({
   onCancel,
   onSubmit,
 }: {
-  roster: string[];
-  submittedNames: string[];
+  /** Roster members without a leg yet — anyone already in edits theirs instead. */
+  availableNames: string[];
   legs: Leg[];
   week: number;
   editing: Leg | null;
@@ -34,12 +34,6 @@ export default function AddLegView({
   onCancel: () => void;
   onSubmit: (name: string, pick: string, odds: number) => Promise<boolean>;
 }) {
-  // The roster is stored in league order; the picker is easier to scan sorted.
-  const sortedRoster = useMemo(
-    () => [...roster].sort((a, b) => a.localeCompare(b)),
-    [roster],
-  );
-
   const [name, setName] = useState(editing?.name ?? "");
   const [pick, setPick] = useState(editing?.pick ?? "");
   const [oddsInput, setOddsInput] = useState(
@@ -87,33 +81,17 @@ export default function AddLegView({
           }}
         >
           <Field label="Who's this">
-            <div className="relative">
-              <select
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                disabled={editing !== null}
-                required
-                className="w-full appearance-none rounded-[14px] border border-input-line bg-card px-4 py-4 text-base text-ink-2 disabled:opacity-70"
-              >
-                <option value="" disabled>
-                  Pick your name
-                </option>
-                {sortedRoster.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                    {!editing && submittedNames.includes(option)
-                      ? " — replaces their leg"
-                      : ""}
-                  </option>
-                ))}
-              </select>
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs text-muted-2"
-              >
-                ▾
-              </span>
-            </div>
+            {editing ? (
+              <p className="rounded-[14px] border border-input-line bg-card px-4 py-4 text-base text-ink-2">
+                {editing.name}
+              </p>
+            ) : availableNames.length === 0 ? (
+              <p className="rounded-[14px] border border-dashed border-dash px-4 py-4 text-[15px] text-muted-2">
+                Everyone&apos;s in. Use Edit on your own leg to change it.
+              </p>
+            ) : (
+              <NamePicker names={availableNames} value={name} onChange={setName} />
+            )}
           </Field>
 
           <Field

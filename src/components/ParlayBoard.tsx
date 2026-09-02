@@ -108,11 +108,10 @@ export default function ParlayBoard({
     legs.length === 1 ? `Just ${legs[0].name} so far — the parlay is their leg.` : undefined;
   const emptyNote = legs.length === 0 ? "Nobody's in yet. First leg sets the line." : undefined;
 
-  const cta = locked
-    ? "Change a leg"
-    : legs.length === 0
-      ? "Be first — add your leg"
-      : "Add your leg";
+  // Once everyone is in there is nothing to add — changes go through Edit and
+  // Remove on the leg itself, so the CTA comes off the page entirely.
+  const everyoneIn = waiting.length === 0;
+  const cta = legs.length === 0 ? "Be first — add your leg" : "Add your leg";
 
   return (
     <>
@@ -130,17 +129,23 @@ export default function ParlayBoard({
             <span className="font-mono text-xs text-muted lg:hidden">
               Week {league.week} · {league.season}
             </span>
-            <button
-              type="button"
-              onClick={() => openForm(null)}
-              className="hidden h-[42px] rounded-xl bg-accent px-[22px] text-[15px] font-semibold text-app transition-opacity hover:opacity-90 lg:block"
-            >
-              {cta}
-            </button>
+            {!everyoneIn && (
+              <button
+                type="button"
+                onClick={() => openForm(null)}
+                className="hidden h-[42px] rounded-xl bg-accent px-[22px] text-[15px] font-semibold text-app transition-opacity hover:opacity-90 lg:block"
+              >
+                {cta}
+              </button>
+            )}
           </div>
         </header>
 
-        <div className="mx-auto grid w-full max-w-[1280px] flex-1 items-start gap-[18px] px-5 pt-[18px] pb-[130px] lg:grid-cols-[420px_1fr] lg:gap-8 lg:px-10 lg:pt-8 lg:pb-11">
+        <div
+          className={`mx-auto grid w-full max-w-[1280px] flex-1 items-start gap-[18px] px-5 pt-[18px] lg:grid-cols-[420px_1fr] lg:gap-8 lg:px-10 lg:pt-8 lg:pb-11 ${
+            everyoneIn ? "pb-10" : "pb-[130px]"
+          }`}
+        >
           <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[104px]">
             {locked && (
               <p className="rounded-xl border border-[var(--accent-28)] bg-[var(--accent-11)] px-4 py-3 font-mono text-[11px] tracking-[0.12em] text-accent-soft uppercase">
@@ -268,21 +273,22 @@ export default function ParlayBoard({
           </div>
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-app from-[62%] to-transparent px-5 pt-[18px] pb-6 lg:hidden">
-          <button
-            type="button"
-            onClick={() => openForm(null)}
-            className="flex h-[54px] w-full items-center justify-center rounded-2xl bg-accent text-base font-semibold text-app transition-opacity active:opacity-90"
-          >
-            {cta}
-          </button>
-        </div>
+        {!everyoneIn && (
+          <div className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-app from-[62%] to-transparent px-5 pt-[18px] pb-6 lg:hidden">
+            <button
+              type="button"
+              onClick={() => openForm(null)}
+              className="flex h-[54px] w-full items-center justify-center rounded-2xl bg-accent text-base font-semibold text-app transition-opacity active:opacity-90"
+            >
+              {cta}
+            </button>
+          </div>
+        )}
       </div>
 
       {formOpen && (
         <AddLegView
-          roster={league.roster}
-          submittedNames={submittedNames}
+          availableNames={waiting}
           legs={legs}
           week={league.week}
           editing={editing}
