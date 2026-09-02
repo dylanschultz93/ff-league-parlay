@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AddLegView from "@/components/AddLegView";
 import LegCard from "@/components/LegCard";
 import SummaryCard from "@/components/SummaryCard";
@@ -34,9 +34,18 @@ export default function ParlayBoard({
 
   const total = league.roster.length;
   const submittedNames = legs.map((leg) => leg.name);
-  const waiting = league.roster.filter(
-    (name) => !submittedNames.includes(name),
+
+  // Both name lists on the board read alphabetically. Sorting here rather than
+  // in LEAGUE.roster or the query keeps league order as the stored data, and
+  // keeps a leg from jumping to the bottom of the list after it is edited.
+  const byName = (a: string, b: string) => a.localeCompare(b);
+  const sortedLegs = useMemo(
+    () => [...legs].sort((a, b) => byName(a.name, b.name)),
+    [legs],
   );
+  const waiting = league.roster
+    .filter((name) => !submittedNames.includes(name))
+    .sort(byName);
   const summary = summarizeParlay(legs.map((leg) => leg.odds));
   const locked = legs.length === total;
 
@@ -203,7 +212,7 @@ export default function ParlayBoard({
 
             {legs.length > 0 && (
               <ul className="flex flex-col gap-2">
-                {legs.map((leg) => (
+                {sortedLegs.map((leg) => (
                   <LegCard
                     key={leg.id}
                     leg={leg}
