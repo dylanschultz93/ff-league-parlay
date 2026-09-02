@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Parlay Pool
 
-## Getting Started
+A small web app for a fantasy league's weekly group parlay. Each league member
+submits one leg (free text) plus its American odds; the app combines them into a
+single parlay and shows the combined odds, implied win probability, and the
+payout on a $10 ticket. Whoever finished last the prior week puts up the $10.
 
-First, run the development server:
+Mobile-first — people submit from their phones.
+
+## Running it
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it's put together
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `src/lib/odds.ts` — American ↔ decimal odds conversion and parlay math.
+- `src/lib/league.ts` — roster, current week, and who's paying. Placeholder
+  values for now.
+- `src/lib/store.ts` — leg storage.
+- `src/app/api/legs/` — `GET`/`POST` the week's legs, `PATCH`/`DELETE` one leg.
+- `src/components/ParlayBoard.tsx` — the single screen.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+One leg per person: submitting again under the same name replaces that person's
+existing leg.
 
-## Learn More
+## Known limitation: storage is in-memory
 
-To learn more about Next.js, take a look at the following resources:
+`src/lib/store.ts` keeps legs in a `Map` in the server process. That is fine
+locally, but **on Vercel each serverless instance holds its own copy, so legs
+will appear and disappear between requests**. This is deliberate for the walking
+skeleton — the next step is swapping that one file for a real datastore
+(Neon Postgres via the Vercel integration, or Upstash Redis). Nothing outside
+`store.ts` needs to change.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Also still to come: no auth (anyone with the link can submit or delete as
+anyone), a single hardcoded week with no history, and no way to record whether
+the parlay actually won.
