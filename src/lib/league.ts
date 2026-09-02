@@ -5,15 +5,17 @@
 
 export const LEAGUE = {
   name: "Parlay Pool",
-  season: 2025,
-  week: 3,
+  season: 2026,
+  week: 1,
   /** Copy for the submission deadline. Cosmetic — nothing enforces it yet. */
   locksAt: "locks Sunday 1:00",
   /**
-   * Lowest scorer from the prior week — they put up the $10. Set to null when
-   * it isn't settled yet and the callout hides itself.
+   * Who's putting up the $10, and why. Normally last week's low scorer; in
+   * Week 1 it falls to whoever finished last the previous season. Set payer to
+   * null when it isn't settled and the callout hides itself.
    */
-  payer: null as string | null,
+  payer: "Chat" as string | null,
+  payerReason: "Finished last in 2025. Rough.",
   roster: [
     "Dylan",
     "Chris",

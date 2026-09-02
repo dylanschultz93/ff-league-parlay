@@ -13,6 +13,7 @@ type League = {
   week: number;
   locksAt: string;
   payer: string | null;
+  payerReason: string;
   roster: string[];
 };
 
@@ -153,7 +154,7 @@ export default function ParlayBoard({
                     {locked ? "'s already paid up" : "'s tab this week"}
                   </span>
                   <span className="font-mono text-[11px] text-muted-3">
-                    Last place, Week {league.week - 1}. Rough.
+                    {league.payerReason}
                   </span>
                 </div>
               </div>
