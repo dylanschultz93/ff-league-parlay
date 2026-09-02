@@ -6,7 +6,11 @@ import { listLegs, upsertLeg } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ legs: listLegs() });
+  try {
+    return NextResponse.json({ legs: await listLegs() });
+  } catch (cause) {
+    return dbError(cause);
+  }
 }
 
 export async function POST(request: Request) {
@@ -39,6 +43,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const leg = upsertLeg({ name, pick: pick.trim(), odds });
-  return NextResponse.json({ leg }, { status: 201 });
+  try {
+    const leg = await upsertLeg({ name, pick: pick.trim(), odds });
+    return NextResponse.json({ leg }, { status: 201 });
+  } catch (cause) {
+    return dbError(cause);
+  }
+}
+
+export function dbError(cause: unknown) {
+  const message =
+    cause instanceof Error ? cause.message : "Database request failed.";
+  console.error("[legs]", cause);
+  return NextResponse.json({ error: message }, { status: 503 });
 }

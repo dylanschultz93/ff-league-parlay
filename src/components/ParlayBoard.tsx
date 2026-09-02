@@ -20,15 +20,17 @@ type League = {
 export default function ParlayBoard({
   league,
   initialLegs,
+  initialError,
 }: {
   league: League;
   initialLegs: Leg[];
+  initialError?: string;
 }) {
   const [legs, setLegs] = useState<Leg[]>(initialLegs);
   const [editing, setEditing] = useState<Leg | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
 
   const total = league.roster.length;
   const submittedNames = legs.map((leg) => leg.name);

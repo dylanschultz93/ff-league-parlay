@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { db, isUuid } from "@/lib/db";
+import { LEAGUE } from "@/lib/league";
 
 export type Leg = {
   id: string;
@@ -10,55 +11,73 @@ export type Leg = {
 
 export type NewLeg = Omit<Leg, "id" | "createdAt">;
 
-/**
- * In-memory store for the walking skeleton.
- *
- * NOTE: this does not survive a server restart, and on Vercel each serverless
- * instance gets its own copy — so legs will appear to come and go in
- * production. Swapping this file for a real datastore (Neon Postgres, Upstash)
- * is the next step; the API routes only depend on the exported functions below.
- *
- * Held on globalThis so the server-component render and the route handlers share
- * one instance — in dev they are separate module graphs and would otherwise each
- * get their own empty Map.
- */
-const globalStore = globalThis as typeof globalThis & {
-  __parlayLegs?: Map<string, Leg>;
+type Row = {
+  id: string;
+  name: string;
+  pick: string;
+  odds: number;
+  created_at: string | Date;
 };
-const legs = (globalStore.__parlayLegs ??= new Map<string, Leg>());
 
-export function listLegs(): Leg[] {
-  return [...legs.values()].sort((a, b) =>
-    a.createdAt.localeCompare(b.createdAt),
-  );
+function toLeg(row: Row): Leg {
+  return {
+    id: row.id,
+    name: row.name,
+    pick: row.pick,
+    odds: Number(row.odds),
+    createdAt: new Date(row.created_at).toISOString(),
+  };
 }
 
-export function findLegByName(name: string): Leg | undefined {
-  return [...legs.values()].find(
-    (leg) => leg.name.toLowerCase() === name.toLowerCase(),
-  );
+/**
+ * Every query is scoped to the current week from LEAGUE, so past weeks stay in
+ * the table untouched and are there when the history screen gets built.
+ */
+export async function listLegs(): Promise<Leg[]> {
+  const rows = (await db()`
+    select id, name, pick, odds, created_at
+      from legs
+     where season = ${LEAGUE.season}
+       and week = ${LEAGUE.week}
+     order by created_at asc
+  `) as Row[];
+  return rows.map(toLeg);
 }
 
 /** One leg per person: submitting again replaces that person's existing leg. */
-export function upsertLeg(input: NewLeg): Leg {
-  const existing = findLegByName(input.name);
-  const leg: Leg = {
-    id: existing?.id ?? randomUUID(),
-    createdAt: existing?.createdAt ?? new Date().toISOString(),
-    ...input,
-  };
-  legs.set(leg.id, leg);
-  return leg;
+export async function upsertLeg(input: NewLeg): Promise<Leg> {
+  const rows = (await db()`
+    insert into legs (season, week, name, pick, odds)
+    values (${LEAGUE.season}, ${LEAGUE.week}, ${input.name}, ${input.pick}, ${input.odds})
+    on conflict (season, week, lower(name))
+    do update set pick = excluded.pick,
+                  odds = excluded.odds,
+                  updated_at = now()
+    returning id, name, pick, odds, created_at
+  `) as Row[];
+  return toLeg(rows[0]);
 }
 
-export function updateLeg(id: string, input: Partial<NewLeg>): Leg | null {
-  const existing = legs.get(id);
-  if (!existing) return null;
-  const updated = { ...existing, ...input };
-  legs.set(id, updated);
-  return updated;
+export async function updateLeg(
+  id: string,
+  patch: Partial<NewLeg>,
+): Promise<Leg | null> {
+  if (!isUuid(id)) return null;
+  const rows = (await db()`
+    update legs
+       set pick = coalesce(${patch.pick ?? null}::text, pick),
+           odds = coalesce(${patch.odds ?? null}::integer, odds),
+           updated_at = now()
+     where id = ${id}::uuid
+    returning id, name, pick, odds, created_at
+  `) as Row[];
+  return rows[0] ? toLeg(rows[0]) : null;
 }
 
-export function deleteLeg(id: string): boolean {
-  return legs.delete(id);
+export async function deleteLeg(id: string): Promise<boolean> {
+  if (!isUuid(id)) return false;
+  const rows = (await db()`
+    delete from legs where id = ${id}::uuid returning id
+  `) as Row[];
+  return rows.length > 0;
 }

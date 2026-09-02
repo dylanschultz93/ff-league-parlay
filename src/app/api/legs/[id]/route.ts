@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dbError } from "@/app/api/legs/route";
 import { isValidAmericanOdds } from "@/lib/odds";
 import { deleteLeg, updateLeg } from "@/lib/store";
 
@@ -35,15 +36,23 @@ export async function PATCH(request: Request, { params }: Context) {
     patch.odds = odds;
   }
 
-  const leg = updateLeg(id, patch);
-  if (!leg) return NextResponse.json({ error: "Not found." }, { status: 404 });
-  return NextResponse.json({ leg });
+  try {
+    const leg = await updateLeg(id, patch);
+    if (!leg) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    return NextResponse.json({ leg });
+  } catch (cause) {
+    return dbError(cause);
+  }
 }
 
 export async function DELETE(_request: Request, { params }: Context) {
   const { id } = await params;
-  if (!deleteLeg(id)) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  try {
+    if (!(await deleteLeg(id))) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+    return new NextResponse(null, { status: 204 });
+  } catch (cause) {
+    return dbError(cause);
   }
-  return new NextResponse(null, { status: 204 });
 }

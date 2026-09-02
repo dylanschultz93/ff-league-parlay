@@ -11,8 +11,13 @@ Mobile-first — people submit from their phones.
 
 ```bash
 npm install
+vercel env pull .env.development.local   # needs `vercel login` + `vercel link` first
+npm run db:init                          # applies schema.sql (safe to re-run)
 npm run dev
 ```
+
+Without a connection string the app still renders — the board shows the database
+error instead of crashing, and the API returns 503 with the same message.
 
 The UI is built from the Claude Design bundle in `prototype/` — that folder is
 the exported design source (artboards for the main screen, empty state, add-leg
@@ -24,7 +29,9 @@ verbatim into `src/app/globals.css`.
 - `src/lib/odds.ts` — American ↔ decimal odds conversion and parlay math.
 - `src/lib/league.ts` — roster, current week, and who's paying. Placeholder
   values for now.
-- `src/lib/store.ts` — leg storage.
+- `src/lib/store.ts` — leg queries (Neon Postgres).
+- `src/lib/db.ts` — lazily-built Neon client and connection-string resolution.
+- `schema.sql` — the `legs` table. Applied with `npm run db:init`.
 - `src/app/api/legs/` — `GET`/`POST` the week's legs, `PATCH`/`DELETE` one leg.
 - `src/components/ParlayBoard.tsx` — the board: summary, progress, legs, waiting.
 - `src/components/AddLegView.tsx` — full-screen submit/edit view.
@@ -33,14 +40,17 @@ verbatim into `src/app/globals.css`.
 One leg per person: submitting again under the same name replaces that person's
 existing leg.
 
-## Known limitation: storage is in-memory
+## Storage
 
-`src/lib/store.ts` keeps legs in a `Map` in the server process. That is fine
-locally, but **on Vercel each serverless instance holds its own copy, so legs
-will appear and disappear between requests**. This is deliberate for the walking
-skeleton — the next step is swapping that one file for a real datastore
-(Neon Postgres via the Vercel integration, or Upstash Redis). Nothing outside
-`store.ts` needs to change.
+Neon Postgres, provisioned through the Vercel Marketplace integration, which
+injects the connection string as an environment variable. `src/lib/db.ts` accepts
+any of the usual names (`DATABASE_URL`, `POSTGRES_URL`, `STORAGE_URL`, …) since
+the integration names it after the prefix chosen at install time.
+
+Rows carry `season` and `week`, and every query is scoped to the current week
+from `src/lib/league.ts`. Past weeks accumulate untouched, ready for the history
+screen. A unique index on `(season, week, lower(name))` enforces one leg per
+person per week and backs the upsert.
 
 ## Also still to come
 
