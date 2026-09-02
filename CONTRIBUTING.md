@@ -24,14 +24,19 @@ Vercel project:
 vercel login
 vercel link
 vercel env pull .env.development.local
-npm run db:init          # applies schema.sql, safe to re-run
+npm run db:init          # applies schema.sql to parlay_dev, safe to re-run
 ```
 
-> [!WARNING]
-> **Development, Preview and Production currently share one database.** Anything
-> you insert or delete locally is what the league sees on the live site. Don't
-> seed junk data, and clean up after yourself if you do. If you're doing work
-> that needs real test data, ask Dylan for a separate Neon branch first.
+> [!NOTE]
+> **Local and preview work is isolated from the league's data.** Development and
+> Preview point at a separate `parlay_dev` database; Production has its own,
+> `neondb`. Insert and delete freely — nobody in the league sees it.
+>
+> That isolation comes from `DATABASE_URL_OVERRIDE`, which exists only on the
+> Development and Preview environments. Production has no override and falls
+> through to the integration's `DATABASE_URL`. If you ever find yourself setting
+> that override on Production, stop — that is the one change that would put
+> local work back on top of live data.
 
 If you don't have Vercel access, you can still work on anything that isn't
 storage — the board renders and the odds math runs without a database.
