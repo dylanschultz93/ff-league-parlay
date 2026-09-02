@@ -11,6 +11,11 @@ import { useEffect, useRef, useState } from "react";
  * delegated events, taps on non-interactive elements are unreliable (iOS Safari
  * in particular), and a button gets correct activation on every platform for
  * free — mouse, touch, keyboard, and assistive tech alike.
+ *
+ * Dismissal deliberately does not hang off a blur handler. Safari does not
+ * focus a button when it is tapped, so closing on focus-out can tear the panel
+ * down before the option's click is delivered, swallowing the selection.
+ * Outside pointerdown and an explicit Tab case cover the same ground safely.
  */
 export default function NamePicker({
   names,
@@ -64,8 +69,9 @@ export default function NamePicker({
   }
 
   function choose(name: string) {
-    onChange(name);
+    // Close first: if onChange ever throws, the panel still comes down.
     close();
+    onChange(name);
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
@@ -91,6 +97,10 @@ export default function NamePicker({
         event.preventDefault();
         close();
         break;
+      case "Tab":
+        // Let focus move on, but don't leave the panel hanging open.
+        close(false);
+        break;
     }
   }
 
@@ -99,12 +109,6 @@ export default function NamePicker({
       ref={rootRef}
       className="relative"
       onKeyDown={onKeyDown}
-      onBlur={(event) => {
-        // Tabbing (or any focus move) out of the picker dismisses it.
-        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-          setOpen(false);
-        }
-      }}
     >
       <button
         ref={buttonRef}
