@@ -24,8 +24,10 @@ error instead of crashing, and the API returns 503 with the same message. If the
 board reports a missing table or column, the database is behind the code: run
 `npm run db:init` again.
 
-Schema changes have to reach production separately, and `main` deploys on merge,
-so **apply the schema before merging the change that needs it**:
+The app also applies `schema.sql` itself, once per process, before its first
+query — so a deploy that lands before anyone runs the script heals itself on the
+first request rather than showing a missing-table error and refusing writes. The
+script stays for applying a change deliberately, ahead of the deploy:
 
 ```bash
 npm run db:init:prod   # applies schema.sql to the league's live database
