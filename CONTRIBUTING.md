@@ -41,6 +41,30 @@ npm run db:init          # applies schema.sql to parlay_dev, safe to re-run
 If you don't have Vercel access, you can still work on anything that isn't
 storage — the board renders and the odds math runs without a database.
 
+### Changing the schema
+
+`schema.sql` is the whole migration story: edit it, keep it re-runnable
+(`if not exists`, or a `drop ... if exists` before an `add`), and apply it.
+
+```bash
+npm run db:init        # parlay_dev — your work
+npm run db:init:prod   # neondb — the league's live data
+```
+
+You do not have to get the ordering right by hand: `src/lib/schema.ts` applies
+`schema.sql` on the first query of each server process, so a deploy that lands
+ahead of the script fixes itself on the first request. Running it deliberately
+is still better — it fails loudly, in front of you, instead of in a log.
+
+Both commands print the database they are about to touch, and `db:init:prod` is
+the only thing in the repo that deliberately steps past `DATABASE_URL_OVERRIDE`.
+
+Because it runs unattended, every statement in `schema.sql` has to stay safe to
+re-run and safe to lose a race with another instance starting at the same time.
+
+Note that this is a schema-only path — it has no notion of ordering or history,
+so a change that needs data backfilled or moved needs a plan of its own.
+
 ## Making a change
 
 1. Branch off `main`. Name it for what it does: `fix/picker-dismiss`,

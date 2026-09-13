@@ -3,9 +3,12 @@
 import { useMemo, useState } from "react";
 import AddLegView from "@/components/AddLegView";
 import LegCard from "@/components/LegCard";
+import LockControls from "@/components/LockControls";
 import SummaryCard from "@/components/SummaryCard";
 import { formatAmericanOdds, summarizeParlay } from "@/lib/odds";
-import type { Leg } from "@/lib/store";
+import { bustedOn, gradedCount, parlayStatus } from "@/lib/parlay";
+import type { ParlayStatus } from "@/lib/parlay";
+import type { Leg, LegResult, Parlay } from "@/lib/store";
 
 type League = {
   name: string;
@@ -20,13 +23,16 @@ type League = {
 export default function ParlayBoard({
   league,
   initialLegs,
+  initialParlay,
   initialError,
 }: {
   league: League;
   initialLegs: Leg[];
+  initialParlay: Parlay;
   initialError?: string;
 }) {
   const [legs, setLegs] = useState<Leg[]>(initialLegs);
+  const [parlay, setParlay] = useState<Parlay>(initialParlay);
   const [editing, setEditing] = useState<Leg | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -47,7 +53,11 @@ export default function ParlayBoard({
     .filter((name) => !submittedNames.includes(name))
     .sort(byName);
   const summary = summarizeParlay(legs.map((leg) => leg.odds));
-  const locked = legs.length === total;
+
+  const locked = parlay.locked;
+  const status = parlayStatus(legs, locked);
+  const graded = gradedCount(legs);
+  const busted = bustedOn(sortedLegs);
 
   async function submitLeg(name: string, pick: string, odds: number) {
     setPending(true);
@@ -67,6 +77,9 @@ export default function ParlayBoard({
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Something went wrong.");
+        // Someone else locked the week while this form was open — reflect it
+        // so the board stops offering edits that will be refused.
+        if (res.status === 409) setParlay({ locked: true, lockedAt: null });
         return false;
       }
       setLegs((current) => [
@@ -93,6 +106,52 @@ export default function ParlayBoard({
     }
   }
 
+  /** Mark a leg won or lost, or pass null to put it back to ungraded. */
+  async function gradeLeg(id: string, result: LegResult | null) {
+    const snapshot = legs;
+    setError(null);
+    setLegs((current) =>
+      current.map((leg) => (leg.id === id ? { ...leg, result } : leg)),
+    );
+    try {
+      const res = await fetch(`/api/legs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ result }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLegs(snapshot);
+        setError(data.error ?? "Could not save that result.");
+      }
+    } catch {
+      setLegs(snapshot);
+      setError("Could not reach the server.");
+    }
+  }
+
+  async function setLocked(next: boolean) {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/parlay", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locked: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not change the lock.");
+        return;
+      }
+      setParlay(data.parlay);
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   function openForm(leg: Leg | null) {
     setEditing(leg);
     setFormOpen(true);
@@ -105,12 +164,15 @@ export default function ParlayBoard({
   }
 
   const oneLegNote =
-    legs.length === 1 ? `Just ${legs[0].name} so far — the parlay is their leg.` : undefined;
+    legs.length === 1 && !locked
+      ? `Just ${legs[0].name} so far — the parlay is their leg.`
+      : undefined;
   const emptyNote = legs.length === 0 ? "Nobody's in yet. First leg sets the line." : undefined;
 
-  // Once everyone is in there is nothing to add — changes go through Edit and
-  // Remove on the leg itself, so the CTA comes off the page entirely.
+  // Once everyone is in there is nothing to add, and once the ticket is placed
+  // nothing can change at all — either way the CTA comes off the page.
   const everyoneIn = waiting.length === 0;
+  const canAdd = !locked && !everyoneIn;
   const cta = legs.length === 0 ? "Be first — add your leg" : "Add your leg";
 
   return (
@@ -129,7 +191,7 @@ export default function ParlayBoard({
             <span className="font-mono text-xs text-muted lg:hidden">
               Week {league.week} · {league.season}
             </span>
-            {!everyoneIn && (
+            {canAdd && (
               <button
                 type="button"
                 onClick={() => openForm(null)}
@@ -141,22 +203,35 @@ export default function ParlayBoard({
           </div>
         </header>
 
+        {/* content-start below lg: the grid is flex-1, so on a short board —
+            a locked week with no waiting list — stretched rows would open a
+            gap between the summary and the legs. */}
         <div
-          className={`mx-auto grid w-full max-w-[1280px] flex-1 items-start gap-[18px] px-5 pt-[18px] lg:grid-cols-[420px_1fr] lg:gap-8 lg:px-10 lg:pt-8 lg:pb-11 ${
-            everyoneIn ? "pb-10" : "pb-[130px]"
+          className={`mx-auto grid w-full max-w-[1280px] flex-1 content-start items-start gap-[18px] px-5 pt-[18px] lg:grid-cols-[420px_1fr] lg:content-normal lg:gap-8 lg:px-10 lg:pt-8 lg:pb-11 ${
+            canAdd ? "pb-[130px]" : "pb-10"
           }`}
         >
           <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[104px]">
-            {locked && (
-              <p className="rounded-xl border border-[var(--accent-28)] bg-[var(--accent-11)] px-4 py-3 font-mono text-[11px] tracking-[0.12em] text-accent-soft uppercase">
-                Locked and loaded · {total} of {total}
-              </p>
-            )}
+            <StatusBanner
+              status={status}
+              legCount={legs.length}
+              graded={graded}
+              bustedName={busted?.name}
+            />
 
             <SummaryCard
               summary={summary}
-              locked={locked}
+              status={status}
               note={emptyNote ?? oneLegNote}
+            />
+
+            <LockControls
+              status={status}
+              legCount={legs.length}
+              graded={graded}
+              pending={pending}
+              onLock={() => setLocked(true)}
+              onUnlock={() => setLocked(false)}
             />
 
             {league.payer && (
@@ -191,28 +266,25 @@ export default function ParlayBoard({
             <div className="flex flex-col gap-2.5">
               <div className="flex items-baseline justify-between">
                 <span className="font-mono text-xs tracking-[0.1em] text-muted uppercase">
-                  {legs.length} of {total} in
+                  {locked
+                    ? `${legs.length} ${legs.length === 1 ? "leg" : "legs"} on the ticket`
+                    : `${legs.length} of ${total} in`}
                 </span>
                 <span className="font-mono text-xs text-muted-3">
                   {locked
-                    ? "all in"
+                    ? `${graded} of ${legs.length} graded`
                     : legs.length === 0
                       ? league.locksAt
-                      : `${waiting.length} to go`}
+                      : everyoneIn
+                        ? "all in"
+                        : `${waiting.length} to go`}
                 </span>
               </div>
-              <div className="flex gap-[5px]">
-                {league.roster.map((name, i) => (
-                  <span
-                    key={name}
-                    className="h-[5px] flex-1 rounded-[3px]"
-                    style={{
-                      background:
-                        i < legs.length ? "var(--accent)" : "var(--track)",
-                    }}
-                  />
-                ))}
-              </div>
+              <ProgressBar
+                legs={sortedLegs}
+                total={total}
+                locked={locked}
+              />
             </div>
 
             {legs.length > 0 && (
@@ -221,14 +293,18 @@ export default function ParlayBoard({
                   <LegCard
                     key={leg.id}
                     leg={leg}
+                    locked={locked}
                     onEdit={() => openForm(leg)}
                     onRemove={() => removeLeg(leg.id)}
+                    onGrade={(result) => gradeLeg(leg.id, result)}
                   />
                 ))}
               </ul>
             )}
 
-            {waiting.length > 0 && (
+            {/* Once the ticket is placed, whoever didn't submit simply missed
+                it — a "still waiting on" list would be asking for nothing. */}
+            {!locked && waiting.length > 0 && (
               <div className="flex flex-col gap-2">
                 <h2 className="pl-0.5 font-mono text-[11px] tracking-[0.12em] text-faint uppercase">
                   {legs.length === 0
@@ -267,13 +343,16 @@ export default function ParlayBoard({
             {locked && summary && (
               <p className="font-mono text-xs text-muted-3">
                 Final ticket: {formatAmericanOdds(summary.american)} across{" "}
-                {total} legs.
+                {legs.length} {legs.length === 1 ? "leg" : "legs"}.
+                {status === "live" && graded < legs.length
+                  ? " Mark each leg as it settles."
+                  : ""}
               </p>
             )}
           </div>
         </div>
 
-        {!everyoneIn && (
+        {canAdd && (
           <div className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-app from-[62%] to-transparent px-5 pt-[18px] pb-6 lg:hidden">
             <button
               type="button"
@@ -298,5 +377,94 @@ export default function ParlayBoard({
         />
       )}
     </>
+  );
+
+}
+
+/**
+ * The lock/settle headline. Before the lock there is nothing to say that the
+ * progress row doesn't already say.
+ */
+function StatusBanner({
+  status,
+  legCount,
+  graded,
+  bustedName,
+}: {
+  status: ParlayStatus;
+  legCount: number;
+  graded: number;
+  bustedName?: string;
+}) {
+  if (status === "open") return null;
+
+  const lost = status === "lost";
+  const text =
+    status === "live"
+      ? `Locked and loaded · ${graded} of ${legCount} graded`
+      : lost
+        ? bustedName
+          ? `Dead ticket · ${bustedName}'s leg missed`
+          : "Dead ticket"
+        : `Cashed · all ${legCount} hit`;
+
+  return (
+    <p
+      className="flex items-center gap-2 rounded-xl border px-4 py-3 font-mono text-[11px] tracking-[0.12em] uppercase"
+      style={{
+        borderColor: lost ? "var(--loss-25)" : "var(--accent-28)",
+        background: lost ? "var(--loss-12)" : "var(--accent-11)",
+        color: lost ? "var(--loss)" : "var(--accent-soft)",
+      }}
+    >
+      <span
+        aria-hidden
+        className="h-[7px] w-[7px] shrink-0 rounded-full"
+        style={{ background: lost ? "var(--loss)" : "var(--accent)" }}
+      />
+      {text}
+    </p>
+  );
+}
+
+/**
+ * One segment per roster spot while legs come in; once locked the roster no
+ * longer matters, so the bar becomes one segment per placed leg, coloured by
+ * how it finished.
+ */
+function ProgressBar({
+  legs,
+  total,
+  locked,
+}: {
+  legs: Leg[];
+  total: number;
+  locked: boolean;
+}) {
+  const segments = locked
+    ? legs.map((leg) => ({
+        key: leg.id,
+        color:
+          leg.result === "won"
+            ? "var(--accent)"
+            : leg.result === "lost"
+              ? "var(--loss)"
+              : "var(--track)",
+      }))
+    : Array.from({ length: total }, (_, i) => ({
+        key: `slot-${i}`,
+        color: i < legs.length ? "var(--accent)" : "var(--track)",
+      }));
+
+  return (
+    <div className="flex gap-[5px]">
+      {segments.map((segment) => (
+        <span
+          key={segment.key}
+          className="h-[5px] flex-1 rounded-[3px]"
+          style={{ background: segment.color }}
+        />
+      ))}
+    </div>
   );
 }

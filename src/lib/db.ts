@@ -1,4 +1,5 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "@/lib/schema";
 
 /**
  * The Vercel/Neon integration names its connection string after the "Custom
@@ -26,7 +27,7 @@ let client: NeonQueryFunction<false, false> | null = null;
  * Lazily built so a missing connection string fails on the first query with a
  * useful message, rather than at import time during `next build`.
  */
-export function db(): NeonQueryFunction<false, false> {
+function connect(): NeonQueryFunction<false, false> {
   if (client) return client;
 
   const key = CANDIDATE_KEYS.find((candidate) => process.env[candidate]);
@@ -39,6 +40,44 @@ export function db(): NeonQueryFunction<false, false> {
 
   client = neon(process.env[key]!);
   return client;
+}
+
+/** A tagged-template query. Rows come back untyped; callers cast. */
+type Query = (
+  strings: TemplateStringsArray,
+  ...params: unknown[]
+) => Promise<unknown[]>;
+
+/**
+ * Every query goes through here, and every query waits on schema.sql having
+ * been applied — once per process, so it costs one extra round trip on a cold
+ * start and nothing after that. Putting it here rather than in each store
+ * function means a new query can't forget it.
+ */
+export function db(): Query {
+  const sql = connect();
+  return async (strings, ...params) => {
+    await ensureSchema((statement) => sql.query(statement));
+    return sql(strings, ...params);
+  };
+}
+
+/**
+ * Postgres SQLSTATEs for "that table/column isn't there": the schema in the
+ * database is behind the code. Raw, this reads as `relation "weeks" does not
+ * exist`, which says nothing about what to do next.
+ */
+const SCHEMA_OUT_OF_DATE = new Set(["42P01", "42703"]);
+
+/** Turn a driver error into something worth putting on the board. */
+export function describeDbError(cause: unknown): string {
+  if (!(cause instanceof Error)) return "Database request failed.";
+
+  const { code } = cause as { code?: unknown };
+  if (typeof code === "string" && SCHEMA_OUT_OF_DATE.has(code)) {
+    return `${cause.message}. The database is behind the code — apply schema.sql with \`npm run db:init\`.`;
+  }
+  return cause.message;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

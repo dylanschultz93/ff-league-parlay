@@ -44,6 +44,14 @@
   --danger-text: oklch(0.75 0.14 30);
   --danger-border: oklch(0.68 0.17 30 / 0.65);
   --danger-bg: oklch(0.62 0.17 30 / 0.08);
+
+  /* "Lost" treatment, from the settled cards on artboard 1e. */
+  --loss: oklch(0.72 0.14 30);
+  --loss-12: oklch(0.68 0.17 30 / 0.12);
+  --loss-25: oklch(0.68 0.17 30 / 0.25);
+  --loss-40: oklch(0.68 0.17 30 / 0.4);
+  /* A dead ticket's odds go grey rather than red — 1e, Week 2. */
+  --settled-dim: #9aa3aa;
 }
 
 @theme inline {
@@ -74,6 +82,8 @@
   --color-cool: var(--cool);
   --color-danger: var(--danger);
   --color-danger-text: var(--danger-text);
+  --color-loss: var(--loss);
+  --color-settled-dim: var(--settled-dim);
 
   --font-sans: var(--font-archivo), Helvetica, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
