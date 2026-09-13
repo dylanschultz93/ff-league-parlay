@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { LEAGUE } from "@/lib/league";
 import { isValidAmericanOdds } from "@/lib/odds";
-import { listLegs, upsertLeg } from "@/lib/store";
+import { getParlay, listLegs, upsertLeg } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    return NextResponse.json({ legs: await listLegs() });
+    const [legs, parlay] = await Promise.all([listLegs(), getParlay()]);
+    return NextResponse.json({ legs, parlay });
   } catch (cause) {
     return dbError(cause);
   }
@@ -45,10 +46,20 @@ export async function POST(request: Request) {
 
   try {
     const leg = await upsertLeg({ name, pick: pick.trim(), odds });
+    // upsertLeg refuses to write once the week is locked; it can't say why.
+    if (!leg) return lockedError();
     return NextResponse.json({ leg }, { status: 201 });
   } catch (cause) {
     return dbError(cause);
   }
+}
+
+/** The ticket is placed — legs are frozen until someone unlocks it. */
+export function lockedError() {
+  return NextResponse.json(
+    { error: "The parlay is locked. Unlock it to change a leg." },
+    { status: 409 },
+  );
 }
 
 export function dbError(cause: unknown) {

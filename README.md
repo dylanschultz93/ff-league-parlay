@@ -32,16 +32,36 @@ verbatim into `src/app/globals.css`.
 - `src/lib/odds.ts` — American ↔ decimal odds conversion and parlay math.
 - `src/lib/league.ts` — roster, current week, and who's paying. Placeholder
   values for now.
-- `src/lib/store.ts` — leg queries (Neon Postgres).
+- `src/lib/store.ts` — leg and lock queries (Neon Postgres).
+- `src/lib/parlay.ts` — whether the ticket is open, live, won, or lost.
 - `src/lib/db.ts` — lazily-built Neon client and connection-string resolution.
-- `schema.sql` — the `legs` table. Applied with `npm run db:init`.
+- `schema.sql` — the `legs` and `weeks` tables. Applied with `npm run db:init`.
 - `src/app/api/legs/` — `GET`/`POST` the week's legs, `PATCH`/`DELETE` one leg.
+  `PATCH` also grades a leg (`{ "result": "won" | "lost" | null }`).
+- `src/app/api/parlay/` — `GET` the week's lock state, `PATCH` to lock/unlock.
 - `src/components/ParlayBoard.tsx` — the board: summary, progress, legs, waiting.
 - `src/components/AddLegView.tsx` — full-screen submit/edit view.
+- `src/components/LockControls.tsx` — locking the ticket, and taking it back.
 - `prototype/` — the exported Claude Design bundle the UI is built from.
 
 One leg per person: submitting again under the same name replaces that person's
 existing leg.
+
+## Locking and grading
+
+Once the bet is actually placed with a book, someone hits **Lock the parlay**
+(two taps — it freezes everyone's leg). After that nothing can be added, edited,
+or removed, and each leg gets **Mark won** / **Mark lost** instead of Edit and
+Remove.
+
+A parlay pays only if every leg hits, so the first `lost` leg settles the whole
+ticket — the board flips to a dead ticket without waiting on the rest. The
+remaining legs can still be graded for the record.
+
+Unlocking works only while nothing has been graded, which covers the misclick;
+after that, clear the results first. The rules live in SQL rather than only in
+the UI — every write carries a guard on the week's lock state, so a lock landing
+mid-request can't let a late leg through.
 
 ## Storage
 
@@ -56,15 +76,18 @@ has no override and uses the integration's `DATABASE_URL` (`neondb`), so local
 and preview work cannot touch the league's data.
 
 Rows carry `season` and `week`, and every query is scoped to the current week
-from `src/lib/league.ts`. Past weeks accumulate untouched, ready for the history
-screen. A unique index on `(season, week, lower(name))` enforces one leg per
+from `src/lib/league.ts`. `weeks` holds one row per week, created when the
+parlay is locked — no row, or a null `locked_at`, means the week is still open.
+Past weeks accumulate untouched, ready for the history screen. A unique index on `(season, week, lower(name))` enforces one leg per
 person per week and backs the upsert.
 
 ## Also still to come
 
 - **No auth.** Anyone with the link can submit, edit, or delete as anyone.
-- **No history.** Artboard 1e (past weeks, record, net) isn't built — it needs a
-  data model for settled weeks, which waits on storage.
-- **Nothing is enforced.** "locks Sunday 1:00" is copy, not a deadline.
+- **No history.** Artboard 1e (past weeks, record, net) isn't built. The `weeks`
+  table is where a settled week's bookkeeping goes; right now it only holds the
+  lock.
+- **The deadline isn't enforced.** "locks Sunday 1:00" is still copy — locking
+  is a button someone presses, not a clock.
 - **`LEAGUE.payer` is null**, so the "whose tab" callout is hidden until we know
   who finished last.

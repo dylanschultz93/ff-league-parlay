@@ -1,15 +1,19 @@
 import { STAKE, formatAmericanOdds, formatMoney, formatProbability } from "@/lib/odds";
 import type { ParlaySummary } from "@/lib/odds";
+import type { ParlayStatus } from "@/lib/parlay";
+import { ResultChip } from "@/components/LegCard";
 
 export default function SummaryCard({
   summary,
-  locked,
+  status,
   note,
 }: {
   summary: ParlaySummary | null;
-  locked: boolean;
+  status: ParlayStatus;
   note?: string;
 }) {
+  const lost = status === "lost";
+  const won = status === "won";
   const headline = summary ? formatAmericanOdds(summary.american) : "—";
   const { mobile, desktop } = headlineSize(headline.length);
   const payout = summary ? formatMoney(summary.payout) : "—";
@@ -17,12 +21,15 @@ export default function SummaryCard({
   return (
     <section className="flex flex-col gap-4 rounded-[22px] border border-card-line bg-card px-5 pt-[22px] pb-[18px] lg:gap-[22px] lg:px-[26px] lg:pt-7 lg:pb-6">
       <div className="flex flex-col gap-1">
-        <h2 className="font-mono text-[11px] tracking-[0.16em] text-[#7a838b] uppercase">
-          {locked ? "Final parlay" : "The parlay so far"}
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-mono text-[11px] tracking-[0.16em] text-[#7a838b] uppercase">
+            {status === "open" ? "The parlay so far" : "Final parlay"}
+          </h2>
+          {(won || lost) && <ResultChip result={won ? "won" : "lost"} />}
+        </div>
         <p
           className={`tabular font-mono leading-none font-semibold tracking-[-0.03em] lg:tracking-[-0.035em] ${
-            summary ? "text-accent" : "text-dim"
+            !summary ? "text-dim" : lost ? "text-settled-dim" : "text-accent"
           }`}
           style={
             {
@@ -50,23 +57,31 @@ export default function SummaryCard({
       </dl>
 
       <div
-        className={`flex items-center justify-between rounded-[14px] border px-4 py-3.5 lg:px-[18px] lg:py-4 ${
-          summary
-            ? "border-[var(--accent-28)] bg-[var(--accent-11)]"
-            : "border-dash bg-[#181c20]"
-        }`}
+        className="flex items-center justify-between rounded-[14px] border px-4 py-3.5 lg:px-[18px] lg:py-4"
+        style={{
+          borderColor: !summary
+            ? "var(--dash)"
+            : lost
+              ? "var(--loss-25)"
+              : "var(--accent-28)",
+          background: !summary
+            ? "#181c20"
+            : lost
+              ? "var(--loss-12)"
+              : "var(--accent-11)",
+        }}
       >
         <span
           className={`shrink-0 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase ${
-            summary ? "text-accent-soft" : "text-muted-3"
+            !summary ? "text-muted-3" : lost ? "text-loss" : "text-accent-soft"
           }`}
         >
-          ${STAKE} pays
+          ${STAKE} {lost ? "would've paid" : won ? "paid" : "pays"}
         </span>
         <span
           className={`tabular font-mono font-semibold tracking-[-0.02em] ${
             payout.length > 10 ? "text-[22px] lg:text-[26px]" : "text-[28px] lg:text-[34px]"
-          } ${summary ? "text-accent-bright" : "text-dim"}`}
+          } ${!summary ? "text-dim" : lost ? "text-settled-dim" : "text-accent-bright"}`}
         >
           {payout}
         </span>
