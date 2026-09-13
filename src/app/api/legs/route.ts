@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { describeDbError } from "@/lib/db";
 import { LEAGUE } from "@/lib/league";
 import { isValidAmericanOdds } from "@/lib/odds";
 import { getParlay, listLegs, upsertLeg } from "@/lib/store";
@@ -63,8 +64,6 @@ export function lockedError() {
 }
 
 export function dbError(cause: unknown) {
-  const message =
-    cause instanceof Error ? cause.message : "Database request failed.";
   console.error("[legs]", cause);
-  return NextResponse.json({ error: message }, { status: 503 });
+  return NextResponse.json({ error: describeDbError(cause) }, { status: 503 });
 }

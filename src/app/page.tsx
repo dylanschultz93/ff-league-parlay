@@ -1,5 +1,6 @@
 import ParlayBoard from "@/components/ParlayBoard";
 import { LEAGUE } from "@/lib/league";
+import { describeDbError } from "@/lib/db";
 import { getParlay, listLegs, type Leg, type Parlay } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +15,7 @@ export default async function Home() {
   } catch (cause) {
     // Usually a missing connection string or an un-applied schema. Render the
     // board anyway so the failure is legible instead of a crash page.
-    initialError =
-      cause instanceof Error ? cause.message : "Could not read the database.";
+    initialError = describeDbError(cause);
   }
 
   return (

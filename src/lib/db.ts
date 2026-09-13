@@ -41,6 +41,24 @@ export function db(): NeonQueryFunction<false, false> {
   return client;
 }
 
+/**
+ * Postgres SQLSTATEs for "that table/column isn't there": the schema in the
+ * database is behind the code. Raw, this reads as `relation "weeks" does not
+ * exist`, which says nothing about what to do next.
+ */
+const SCHEMA_OUT_OF_DATE = new Set(["42P01", "42703"]);
+
+/** Turn a driver error into something worth putting on the board. */
+export function describeDbError(cause: unknown): string {
+  if (!(cause instanceof Error)) return "Database request failed.";
+
+  const { code } = cause as { code?: unknown };
+  if (typeof code === "string" && SCHEMA_OUT_OF_DATE.has(code)) {
+    return `${cause.message}. The database is behind the code — apply schema.sql with \`npm run db:init\`.`;
+  }
+  return cause.message;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Postgres raises on a malformed uuid — screen ids before they reach a query. */

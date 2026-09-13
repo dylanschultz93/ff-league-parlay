@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:init": "node scripts/init-db.mjs",
+    "db:init:prod": "node scripts/init-db.mjs --production",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

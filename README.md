@@ -20,7 +20,19 @@ npm run dev
 ```
 
 Without a connection string the app still renders — the board shows the database
-error instead of crashing, and the API returns 503 with the same message.
+error instead of crashing, and the API returns 503 with the same message. If the
+board reports a missing table or column, the database is behind the code: run
+`npm run db:init` again.
+
+Schema changes have to reach production separately, and `main` deploys on merge,
+so **apply the schema before merging the change that needs it**:
+
+```bash
+npm run db:init:prod   # applies schema.sql to the league's live database
+```
+
+That skips `DATABASE_URL_OVERRIDE` and uses the integration's `DATABASE_URL`.
+Both scripts print the database they are about to touch before they touch it.
 
 The UI is built from the Claude Design bundle in `prototype/` — that folder is
 the exported design source (artboards for the main screen, empty state, add-leg
@@ -74,6 +86,10 @@ Development and Preview run against a separate `parlay_dev` database via
 `DATABASE_URL_OVERRIDE`, which is set only on those two environments. Production
 has no override and uses the integration's `DATABASE_URL` (`neondb`), so local
 and preview work cannot touch the league's data.
+
+`npm run db:init` applies `schema.sql` to whichever database the connection
+string points at — `parlay_dev` locally, and `neondb` with `db:init:prod`. It is
+re-runnable, so it doubles as the migration step for a schema change.
 
 Rows carry `season` and `week`, and every query is scoped to the current week
 from `src/lib/league.ts`. `weeks` holds one row per week, created when the
