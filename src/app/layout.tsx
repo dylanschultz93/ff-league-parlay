@@ -15,7 +15,11 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Parlay Pool",
+  // Each section sets its own title; the board keeps the bare default.
+  title: {
+    default: "Parlay Pool",
+    template: "%s · Parlay Pool",
+  },
   description: "One parlay, one leg each, ten dollars on the line.",
 };
 

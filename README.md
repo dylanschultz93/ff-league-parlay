@@ -56,6 +56,12 @@ verbatim into `src/app/globals.css`.
 - `src/components/ParlayBoard.tsx` — the board: summary, progress, legs, waiting.
 - `src/components/AddLegView.tsx` — full-screen submit/edit view.
 - `src/components/LockControls.tsx` — locking the ticket, and taking it back.
+- `src/components/AppHeader.tsx` / `NavTabs.tsx` — the bar and tabs every screen
+  sits under. `PageShell.tsx` pairs the header with the body the non-board
+  screens share.
+- `src/app/history/`, `src/app/stats/`, `src/app/manage/` — past weeks,
+  participant records, and roster/payer management. **Wireframes so far** — they
+  render from `src/lib/wireframe.ts` and nothing on them writes anything.
 - `prototype/` — the exported Claude Design bundle the UI is built from.
 
 One leg per person: submitting again under the same name replaces that person's
@@ -102,9 +108,12 @@ person per week and backs the upsert.
 ## Also still to come
 
 - **No auth.** Anyone with the link can submit, edit, or delete as anyone.
-- **No history.** Artboard 1e (past weeks, record, net) isn't built. The `weeks`
-  table is where a settled week's bookkeeping goes; right now it only holds the
-  lock.
+- **The new screens are drawings.** `/history`, `/stats`, and `/manage` have the
+  navigation and the layout but no data behind them — every number comes from
+  `src/lib/wireframe.ts` and every control is inert. Wiring them up means
+  a settled week's bookkeeping on the `weeks` table (which holds only the lock
+  today), a per-person record, and a roster that lives somewhere other than
+  `src/lib/league.ts`.
 - **The deadline isn't enforced.** "locks Sunday 1:00" is still copy — locking
   is a button someone presses, not a clock.
 - **`LEAGUE.payer` is null**, so the "whose tab" callout is hidden until we know

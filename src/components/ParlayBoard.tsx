@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import AddLegView from "@/components/AddLegView";
+import AppHeader from "@/components/AppHeader";
 import LegCard from "@/components/LegCard";
 import LockControls from "@/components/LockControls";
 import SummaryCard from "@/components/SummaryCard";
@@ -178,20 +179,12 @@ export default function ParlayBoard({
   return (
     <>
       <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-10 border-b border-hairline bg-app px-5 pt-[22px] pb-3.5 lg:px-10 lg:py-[22px]">
-          <div className="mx-auto flex w-full max-w-[1280px] items-baseline justify-between">
-            <div className="flex items-baseline gap-4">
-              <span className="text-[19px] font-bold tracking-[-0.02em] text-ink lg:text-[22px]">
-                {league.name}
-              </span>
-              <span className="hidden font-mono text-[13px] text-muted lg:inline">
-                Week {league.week} · {league.season} Season
-              </span>
-            </div>
-            <span className="font-mono text-xs text-muted lg:hidden">
-              Week {league.week} · {league.season}
-            </span>
-            {canAdd && (
+        <AppHeader
+          title={league.name}
+          meta={`Week ${league.week} · ${league.season} Season`}
+          metaShort={`Week ${league.week} · ${league.season}`}
+          action={
+            canAdd ? (
               <button
                 type="button"
                 onClick={() => openForm(null)}
@@ -199,9 +192,9 @@ export default function ParlayBoard({
               >
                 {cta}
               </button>
-            )}
-          </div>
-        </header>
+            ) : undefined
+          }
+        />
 
         {/* content-start below lg: the grid is flex-1, so on a short board —
             a locked week with no waiting list — stretched rows would open a
@@ -211,7 +204,7 @@ export default function ParlayBoard({
             canAdd ? "pb-[130px]" : "pb-10"
           }`}
         >
-          <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[104px]">
+          <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[143px]">
             <StatusBanner
               status={status}
               legCount={legs.length}
