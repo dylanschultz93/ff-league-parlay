@@ -1,16 +1,13 @@
 /**
- * League configuration — the things that change once a week, by hand.
+ * What's left of the league in code.
  *
- * The roster and the week's payer used to live here too. They're in the
- * database now, behind the management screen: see `participants` and the
- * `payer` columns on `weeks` in schema.sql. schema.sql seeds the roster with
- * the names that were here.
+ * The roster, the week's payer, and the current week are all in the database
+ * now, behind the management screen: `participants`, the `payer` columns on
+ * `weeks`, and `league_state`. Nothing here changes week to week.
  */
 
 export const LEAGUE = {
   name: "Parlay Pool",
-  season: 2026,
-  week: 1,
   /** Copy for the submission deadline. Cosmetic — nothing enforces it yet. */
   locksAt: "locks Sunday 1:00",
 };

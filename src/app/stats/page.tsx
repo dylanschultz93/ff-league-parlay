@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import PageShell from "@/components/PageShell";
 import StatTile from "@/components/StatTile";
 import WireframeNote from "@/components/WireframeNote";
-import { LEAGUE } from "@/lib/league";
+import { currentSeason } from "@/lib/season";
 import { formatAmericanOdds } from "@/lib/odds";
 import { PARTICIPANT_STATS, PAST_WEEKS, type ParticipantStat } from "@/lib/wireframe";
 
 export const metadata: Metadata = { title: "Stats" };
+export const dynamic = "force-dynamic";
 
 /** How the list is ordered. Only the first one does anything so far. */
 const SORTS = ["Hit rate", "Legs", "Longest odds", "Name"];
@@ -20,7 +21,9 @@ function hitRate(person: ParticipantStat): number {
   return total === 0 ? 0 : person.won / total;
 }
 
-export default function StatsPage() {
+export default async function StatsPage() {
+  const season = await currentSeason();
+  const archive = season === null ? null : season - 1;
   const ranked = [...PARTICIPANT_STATS].sort(
     (a, b) =>
       hitRate(b) - hitRate(a) ||
@@ -34,8 +37,8 @@ export default function StatsPage() {
   return (
     <PageShell
       title="Stats"
-      meta={`${LEAGUE.season - 1} Season`}
-      metaShort={`${LEAGUE.season - 1}`}
+      meta={archive === null ? undefined : `${archive} Season`}
+      metaShort={archive === null ? undefined : `${archive}`}
     >
       <WireframeNote>
         Who actually hits their leg. Made-up numbers — nothing tallies a

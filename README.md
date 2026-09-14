@@ -44,8 +44,9 @@ verbatim into `src/app/globals.css`.
 ## How it's put together
 
 - `src/lib/odds.ts` — American ↔ decimal odds conversion and parlay math.
-- `src/lib/league.ts` — league name, season, and current week. The roster and
-  the payer moved into the database; this is what's left that changes by hand.
+- `src/lib/league.ts` — the app's name and the deadline copy. That's all that's
+  left in code: the roster, the payer, and the current week are in the database,
+  all three set on `/manage`.
 - `src/lib/store.ts` — leg and lock queries (Neon Postgres).
 - `src/lib/parlay.ts` — whether the ticket is open, live, won, or lost.
 - `src/lib/db.ts` — lazily-built Neon client and connection-string resolution.
@@ -57,6 +58,8 @@ verbatim into `src/app/globals.css`.
   or `{ "payer": null }` to clear it).
 - `src/app/api/participants/` — `GET`/`POST` the roster, `PATCH` one person's
   `active` flag, `DELETE` to take them off the list.
+- `src/app/api/league/` — `GET` the current week, `PATCH` to move it
+  (`{ "season": 2026, "week": 2 }`; either field alone is fine).
 - `src/components/ParlayBoard.tsx` — the board: summary, progress, legs, waiting.
 - `src/components/AddLegView.tsx` — full-screen submit/edit view.
 - `src/components/LockControls.tsx` — locking the ticket, and taking it back.
@@ -105,14 +108,20 @@ and preview work cannot touch the league's data.
 string points at — `parlay_dev` locally, and `neondb` with `db:init:prod`. It is
 re-runnable, so it doubles as the migration step for a schema change.
 
-Rows carry `season` and `week`, and every query is scoped to the current week
-from `src/lib/league.ts`. `weeks` holds one row per week, created the first time
+Rows carry `season` and `week`, and every query is scoped to the current week.
+That lives in `league_state`, a single row read by a subquery inside each
+week-scoped statement — so moving the week is one write, takes effect on the
+next request everywhere, and costs no extra round trip. `weeks` holds one row
+per week, created the first time
 anyone locks the parlay or names a payer — so the row existing does not mean the
 week is locked, only a non-null `locked_at` does.
 
-`participants` is the roster. It seeds itself from `schema.sql` with the names
-that used to be hardcoded in `src/lib/league.ts`, once, guarded so that a
-re-run against a populated table does nothing. Benched people (`active` false)
+`participants` is the roster, and `league_state` is the current week. Both seed
+themselves from `schema.sql` — the roster with the names that used to be
+hardcoded, the week with where the code had it — once, guarded so a re-run
+against populated tables does nothing. That guard matters: `schema.sql` re-runs
+on every deploy and on the first query of every cold start, and without it a
+restart would quietly drag the league back to week 1. Benched people (`active` false)
 keep their legs but drop off the week's waiting list.
 Past weeks accumulate untouched, ready for the history screen. A unique index on `(season, week, lower(name))` enforces one leg per
 person per week and backs the upsert.
@@ -126,6 +135,7 @@ person per week and backs the upsert.
   settled week's bookkeeping on the `weeks` table and a per-person record,
   neither of which is stored yet.
 - **The deadline isn't enforced.** "locks Sunday 1:00" is still copy — locking
-  is a button someone presses, not a clock.
+  is a button someone presses, not a clock. The week works the same way: it is
+  set by hand on `/manage`, deliberately, rather than derived from the date.
 - **Nobody's on the hook until someone says so.** The payer starts null each
   week and the "whose tab" callout stays hidden until it's set on `/manage`.

@@ -1,26 +1,41 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Participant, Parlay } from "@/lib/store";
+import type { LeagueState, Participant, Parlay } from "@/lib/store";
 
 /**
- * The two things about the league that change: who's covering this week's $10,
- * and who's on the list at all. Both used to be constants in league.ts.
+ * The three things about the league that change: which week it is, who's
+ * covering this week's $10, and who's on the list at all. All of them used to
+ * be constants in league.ts.
  *
  * There's no auth here, same as everywhere else — anyone with the link can
- * bench anyone. Removal is the one move that loses something, so it asks first.
+ * bench anyone. The moves that lose something ask first.
  */
 export default function ManageBoard({
-  week,
+  initialState,
+  initialLegCount,
   initialParticipants,
   initialParlay,
   initialError,
 }: {
-  week: number;
+  initialState: LeagueState | null;
+  initialLegCount: number;
   initialParticipants: Participant[];
   initialParlay: Parlay;
   initialError?: string;
 }) {
+  const router = useRouter();
+  const [state, setState] = useState<LeagueState | null>(initialState);
+  const [legCount, setLegCount] = useState(initialLegCount);
+  const [advancing, setAdvancing] = useState(false);
+  const [seasonDraft, setSeasonDraft] = useState(
+    initialState ? String(initialState.season) : "",
+  );
+  const [weekDraft, setWeekDraft] = useState(
+    initialState ? String(initialState.week) : "",
+  );
+  const week = state?.week ?? 0;
   const [participants, setParticipants] =
     useState<Participant[]>(initialParticipants);
   const [parlay, setParlay] = useState<Parlay>(initialParlay);
@@ -77,6 +92,33 @@ export default function ManageBoard({
     } finally {
       setPending(false);
     }
+  }
+
+  /**
+   * Point the whole app at a week. Everything else on this screen belongs to
+   * the week, so take the new week's payer and leg count from the response
+   * rather than leaving stale ones on screen.
+   */
+  async function setWeek(season: number, week: number) {
+    const data = await send("/api/league", {
+      method: "PATCH",
+      body: JSON.stringify({ season, week }),
+    });
+    if (!data) return;
+    const next = data.league as LeagueState;
+    const parlay = data.parlay as Parlay;
+    setState(next);
+    setSeasonDraft(String(next.season));
+    setWeekDraft(String(next.week));
+    setLegCount(data.legCount as number);
+    setParlay(parlay);
+    setPayerDraft(parlay.payer);
+    setReasonDraft(parlay.payerReason ?? "");
+    setAdvancing(false);
+    setSaved(false);
+    // The header is rendered on the server and names the week, so it goes
+    // stale on a change made here. Nothing else on the page needs this.
+    router.refresh();
   }
 
   async function savePayer(payer: string | null) {
@@ -141,6 +183,113 @@ export default function ManageBoard({
         >
           {error}
         </p>
+      )}
+
+      {state && (
+        <Section
+          title="The week"
+          hint="Everything else here belongs to it — the board, the payer, and where a submitted leg lands."
+        >
+          <div className="flex items-center gap-3 rounded-[14px] border border-[var(--accent-28)] bg-[var(--accent-11)] px-4 py-3.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#20252a] font-mono text-[13px] font-semibold text-[#b9c2c8]">
+              {state.week}
+            </span>
+            <div className="flex min-w-0 flex-col gap-px">
+              <span className="text-[15px] text-ink-2">
+                Week {state.week} · {state.season} Season
+              </span>
+              <span className="font-mono text-[11px] text-muted-3">
+                {legCount === 0
+                  ? "Nothing on the board yet."
+                  : parlay.locked
+                    ? `Locked with ${legCount} ${legCount === 1 ? "leg" : "legs"}.`
+                    : `${legCount} ${legCount === 1 ? "leg" : "legs"} in, not locked yet.`}
+              </span>
+            </div>
+          </div>
+
+          {/* Advancing is the weekly ritual, so it gets the button and the
+              typing is kept for corrections. */}
+          {advancing ? (
+            <div className="flex flex-col gap-2.5 rounded-2xl border border-[var(--accent-28)] bg-[var(--accent-11)] px-4 py-3.5">
+              <p className="text-[13px] text-ink-3">
+                Move to week {state.week + 1}?{" "}
+                {legCount > 0 && !parlay.locked
+                  ? `Week ${state.week} was never locked — its ${legCount} ${legCount === 1 ? "leg stays" : "legs stay"} on week ${state.week}, and the board starts empty.`
+                  : "The board starts empty and nobody's on the hook until you say so."}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setWeek(state.season, state.week + 1)}
+                  disabled={pending}
+                  className="h-10 flex-1 rounded-xl bg-accent text-sm font-semibold text-app transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {pending ? "Moving…" : `Yes, start week ${state.week + 1}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdvancing(false)}
+                  className="h-10 rounded-xl border border-input-line px-4 text-sm text-muted transition-colors hover:text-ink-3"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdvancing(true)}
+              disabled={pending}
+              className="flex h-[46px] w-full items-center justify-center rounded-xl bg-accent text-[15px] font-semibold text-app transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              Start week {state.week + 1}
+            </button>
+          )}
+
+          <Field label="Or set it directly">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const season = Number(seasonDraft);
+                const week = Number(weekDraft);
+                if (Number.isInteger(season) && Number.isInteger(week)) {
+                  setWeek(season, week);
+                }
+              }}
+              className="flex gap-2"
+            >
+              <LabelledNumber
+                label="Season"
+                value={seasonDraft}
+                onChange={setSeasonDraft}
+              />
+              <LabelledNumber
+                label="Week"
+                value={weekDraft}
+                onChange={setWeekDraft}
+              />
+              <button
+                type="submit"
+                disabled={
+                  pending ||
+                  (Number(seasonDraft) === state.season &&
+                    Number(weekDraft) === state.week) ||
+                  seasonDraft.trim() === "" ||
+                  weekDraft.trim() === ""
+                }
+                className="h-[46px] shrink-0 self-end rounded-xl border border-input-line px-5 text-[15px] text-muted transition-colors hover:text-ink-3 disabled:opacity-40"
+              >
+                Set
+              </button>
+            </form>
+          </Field>
+
+          <p className="font-mono text-[11px] text-muted-3">
+            Past weeks keep their own legs, payer and lock — moving back and
+            forth doesn&apos;t lose any of it.
+          </p>
+        </Section>
       )}
 
       <Section
@@ -418,5 +567,30 @@ function RowButton({
     >
       {label}
     </button>
+  );
+}
+
+function LabelledNumber({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <span className="pl-0.5 font-mono text-[10px] tracking-[0.12em] text-muted-3 uppercase">
+        {label}
+      </span>
+      <input
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="tabular h-[46px] w-full min-w-0 rounded-xl border border-input-line bg-transparent px-3.5 font-mono text-[15px] text-ink-2 focus:border-[var(--accent-50)] focus:outline-none"
+      />
+    </label>
   );
 }

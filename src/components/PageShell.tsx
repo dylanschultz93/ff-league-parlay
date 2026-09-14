@@ -12,7 +12,7 @@ export default function PageShell({
   children,
 }: {
   title: string;
-  meta: string;
+  meta?: string;
   metaShort?: string;
   children: React.ReactNode;
 }) {

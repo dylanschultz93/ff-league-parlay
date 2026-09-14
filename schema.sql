@@ -81,3 +81,22 @@ select seed.name
                ('Tomas'), ('Alec'), ('Harrison'), ('DK')) as seed(name)
  where not exists (select 1 from participants)
     on conflict (lower(name)) do nothing;
+
+-- Which week the app is on. Exactly one row: every query that means "this
+-- week" reads it, so this is the single thing that moves the whole app
+-- forward. Nothing derives it from a date and nothing advances it on its own —
+-- it is set by hand on the management screen.
+create table if not exists league_state (
+  -- Singleton. The check pins the key to one value, so a second row can't be
+  -- inserted even by something that doesn't know this table is meant to be one.
+  id         boolean     primary key default true check (id),
+  season     integer     not null,
+  week       integer     not null,
+  updated_at timestamptz not null default now()
+);
+
+-- Seeded to where src/lib/league.ts had it when this moved into the database.
+-- Re-running does nothing, same as the participants seed above.
+insert into league_state (season, week)
+values (2026, 1)
+on conflict (id) do nothing;

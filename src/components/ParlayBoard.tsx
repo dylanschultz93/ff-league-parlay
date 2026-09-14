@@ -9,23 +9,24 @@ import SummaryCard from "@/components/SummaryCard";
 import { formatAmericanOdds, summarizeParlay } from "@/lib/odds";
 import { bustedOn, gradedCount, parlayStatus } from "@/lib/parlay";
 import type { ParlayStatus } from "@/lib/parlay";
-import type { Leg, LegResult, Parlay } from "@/lib/store";
+import type { Leg, LeagueState, LegResult, Parlay } from "@/lib/store";
 
 type League = {
   name: string;
-  season: number;
-  week: number;
   locksAt: string;
 };
 
 export default function ParlayBoard({
   league,
+  state,
   roster,
   initialLegs,
   initialParlay,
   initialError,
 }: {
   league: League;
+  /** The week everything here belongs to. Null when the database is down. */
+  state: LeagueState | null;
   /** Active participants, from the database. Managed on /manage. */
   roster: string[];
   initialLegs: Leg[];
@@ -181,8 +182,8 @@ export default function ParlayBoard({
       <div className="flex min-h-dvh flex-col">
         <AppHeader
           title={league.name}
-          meta={`Week ${league.week} · ${league.season} Season`}
-          metaShort={`Week ${league.week} · ${league.season}`}
+          meta={state ? `Week ${state.week} · ${state.season} Season` : undefined}
+          metaShort={state ? `Week ${state.week} · ${state.season}` : undefined}
           action={
             canAdd ? (
               <button
@@ -364,7 +365,7 @@ export default function ParlayBoard({
         <AddLegView
           availableNames={waiting}
           legs={legs}
-          week={league.week}
+          week={state?.week ?? 0}
           editing={editing}
           pending={pending}
           onCancel={closeForm}

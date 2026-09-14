@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import ManageBoard from "@/components/ManageBoard";
 import PageShell from "@/components/PageShell";
 import { describeDbError } from "@/lib/db";
-import { LEAGUE } from "@/lib/league";
 import {
+  getLeagueState,
   getParlay,
+  listLegs,
   listParticipants,
+  type LeagueState,
   type Parlay,
   type Participant,
 } from "@/lib/store";
@@ -21,13 +23,24 @@ export default async function ManagePage() {
     payer: null,
     payerReason: null,
   };
+  let state: LeagueState | null = null;
+  let legCount = 0;
   let initialError: string | undefined;
 
   try {
-    [participants, parlay] = await Promise.all([
-      listParticipants(),
-      getParlay(),
-    ]);
+    // The leg count is only here so the week control can say what advancing
+    // would leave behind.
+    const [loadedParticipants, loadedParlay, loadedState, legs] =
+      await Promise.all([
+        listParticipants(),
+        getParlay(),
+        getLeagueState(),
+        listLegs(),
+      ]);
+    participants = loadedParticipants;
+    parlay = loadedParlay;
+    state = loadedState;
+    legCount = legs.length;
   } catch (cause) {
     // Same as the board: render the screen with the failure on it rather than
     // a crash page.
@@ -37,11 +50,12 @@ export default async function ManagePage() {
   return (
     <PageShell
       title="Manage"
-      meta={`Week ${LEAGUE.week} · ${LEAGUE.season} Season`}
-      metaShort={`Week ${LEAGUE.week}`}
+      meta={state ? `Week ${state.week} · ${state.season} Season` : undefined}
+      metaShort={state ? `Week ${state.week}` : undefined}
     >
       <ManageBoard
-        week={LEAGUE.week}
+        initialState={state}
+        initialLegCount={legCount}
         initialParticipants={participants}
         initialParlay={parlay}
         initialError={initialError}
