@@ -63,7 +63,9 @@ Because it runs unattended, every statement in `schema.sql` has to stay safe to
 re-run and safe to lose a race with another instance starting at the same time.
 
 Note that this is a schema-only path — it has no notion of ordering or history,
-so a change that needs data backfilled or moved needs a plan of its own.
+so a change that needs data backfilled or moved needs a plan of its own. The one
+piece of data in there is the `participants` seed, which is written to survive
+that: it does nothing once anyone is on the list.
 
 ## Making a change
 
@@ -88,8 +90,9 @@ so a change that needs data backfilled or moved needs a plan of its own.
 - **Odds math lives in `src/lib/odds.ts`.** It's pure and easy to reason about.
   If you touch it, work an example by hand and say so in the PR — a wrong
   conversion is not obvious by eye.
-- **`src/lib/league.ts`** holds the roster, week, and who's paying. Updating the
-  week each week is a config change, not a code change.
+- **`src/lib/league.ts`** holds the season and the current week. Updating the
+  week each week is a config change, not a code change. The roster and the
+  payer are in the database, edited on `/manage`.
 - **There's no auth.** Anyone with the link can submit, edit, or delete as
   anyone. That's a deliberate tradeoff for a 14-person league — just don't build
   on the assumption that a request is trustworthy.

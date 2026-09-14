@@ -19,9 +19,25 @@ export type NewLeg = Omit<Leg, "id" | "result" | "createdAt">;
 export type Parlay = {
   locked: boolean;
   lockedAt: string | null;
+  /** Who's putting up the $10 this week, and why. Null until it's settled. */
+  payer: string | null;
+  payerReason: string | null;
 };
 
-const OPEN: Parlay = { locked: false, lockedAt: null };
+const OPEN: Parlay = {
+  locked: false,
+  lockedAt: null,
+  payer: null,
+  payerReason: null,
+};
+
+/** Someone who can put a leg on the ticket. */
+export type Participant = {
+  id: string;
+  name: string;
+  /** Benched people keep their legs but drop off the week's waiting list. */
+  active: boolean;
+};
 
 type Row = {
   id: string;
@@ -58,19 +74,54 @@ export async function listLegs(): Promise<Leg[]> {
   return rows.map(toLeg);
 }
 
+type WeekRow = {
+  locked_at: string | Date | null;
+  payer: string | null;
+  payer_reason: string | null;
+};
+
 export async function getParlay(): Promise<Parlay> {
   const rows = (await db()`
-    select locked_at
+    select locked_at, payer, payer_reason
       from weeks
      where season = ${LEAGUE.season}
        and week = ${LEAGUE.week}
-  `) as { locked_at: string | Date | null }[];
-  return toParlay(rows[0]?.locked_at ?? null);
+  `) as WeekRow[];
+  return toParlay(rows[0]);
 }
 
-function toParlay(lockedAt: string | Date | null): Parlay {
-  if (!lockedAt) return OPEN;
-  return { locked: true, lockedAt: new Date(lockedAt).toISOString() };
+/**
+ * A week row now appears as soon as anyone names a payer, so its existence no
+ * longer means the parlay is locked — only `locked_at` does.
+ */
+function toParlay(row: WeekRow | undefined): Parlay {
+  if (!row) return OPEN;
+  return {
+    locked: row.locked_at !== null,
+    lockedAt: row.locked_at ? new Date(row.locked_at).toISOString() : null,
+    payer: row.payer,
+    payerReason: row.payer_reason,
+  };
+}
+
+/**
+ * Name who's covering the ticket, or pass null to take it back off them. The
+ * upsert mirrors lockParlay's: whoever writes to the week first creates it.
+ */
+export async function setPayer(
+  payer: string | null,
+  payerReason: string | null,
+): Promise<Parlay> {
+  const rows = (await db()`
+    insert into weeks (season, week, payer, payer_reason)
+    values (${LEAGUE.season}, ${LEAGUE.week}, ${payer}, ${payerReason})
+    on conflict (season, week)
+    do update set payer = excluded.payer,
+                  payer_reason = excluded.payer_reason,
+                  updated_at = now()
+    returning locked_at, payer, payer_reason
+  `) as WeekRow[];
+  return toParlay(rows[0]);
 }
 
 /**
@@ -84,9 +135,9 @@ export async function lockParlay(): Promise<Parlay> {
     on conflict (season, week)
     do update set locked_at = coalesce(weeks.locked_at, now()),
                   updated_at = now()
-    returning locked_at
-  `) as { locked_at: string | Date }[];
-  return toParlay(rows[0].locked_at);
+    returning locked_at, payer, payer_reason
+  `) as WeekRow[];
+  return toParlay(rows[0]);
 }
 
 /**
@@ -109,9 +160,9 @@ export async function unlockParlay(): Promise<Parlay | null> {
                 and legs.week = weeks.week
                 and legs.result is not null
            )
-    returning locked_at
-  `) as { locked_at: string | Date | null }[];
-  return rows[0] ? toParlay(rows[0].locked_at) : null;
+    returning locked_at, payer, payer_reason
+  `) as WeekRow[];
+  return rows[0] ? toParlay(rows[0]) : null;
 }
 
 /**
@@ -204,4 +255,85 @@ export async function deleteLeg(id: string): Promise<boolean> {
     returning id
   `) as Row[];
   return rows.length > 0;
+}
+
+/* -- Participants ------------------------------------------------------- */
+
+type ParticipantRow = { id: string; name: string; active: boolean };
+
+/**
+ * Everyone on the list, benched included — the management screen shows both,
+ * and the board filters to the active ones. Ordered by name because that is
+ * how both screens read it; nothing depends on the order they were added in.
+ */
+export async function listParticipants(): Promise<Participant[]> {
+  const rows = (await db()`
+    select id, name, active
+      from participants
+     order by lower(name)
+  `) as ParticipantRow[];
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    active: row.active,
+  }));
+}
+
+/** Returns null when that name is already on the list, whatever its case. */
+export async function addParticipant(
+  name: string,
+): Promise<Participant | null> {
+  const rows = (await db()`
+    insert into participants (name)
+    values (${name})
+    on conflict (lower(name)) do nothing
+    returning id, name, active
+  `) as ParticipantRow[];
+  return rows[0] ?? null;
+}
+
+export async function setParticipantActive(
+  id: string,
+  active: boolean,
+): Promise<Participant | null> {
+  if (!isUuid(id)) return null;
+  const rows = (await db()`
+    update participants
+       set active = ${active},
+           updated_at = now()
+     where id = ${id}::uuid
+    returning id, name, active
+  `) as ParticipantRow[];
+  return rows[0] ?? null;
+}
+
+/**
+ * Why a removal didn't happen. `has-leg` is the interesting one: legs are
+ * keyed by name, not by a foreign key, so dropping someone mid-week would
+ * leave a leg on the board belonging to nobody. Bench them instead, or take
+ * the leg off first.
+ */
+export type RemoveOutcome = "removed" | "has-leg" | "missing";
+
+export async function removeParticipant(id: string): Promise<RemoveOutcome> {
+  if (!isUuid(id)) return "missing";
+  const rows = (await db()`
+    delete from participants
+     where id = ${id}::uuid
+       and not exists (
+             select 1
+               from legs
+              where legs.season = ${LEAGUE.season}
+                and legs.week = ${LEAGUE.week}
+                and lower(legs.name) = lower(participants.name)
+           )
+    returning id
+  `) as { id: string }[];
+  if (rows.length > 0) return "removed";
+
+  // Nothing came back, which is either of the two `where` clauses. Ask which.
+  const still = (await db()`
+    select 1 from participants where id = ${id}::uuid
+  `) as unknown[];
+  return still.length > 0 ? "has-leg" : "missing";
 }

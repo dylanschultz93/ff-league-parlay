@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import AddLegView from "@/components/AddLegView";
+import AppHeader from "@/components/AppHeader";
 import LegCard from "@/components/LegCard";
 import LockControls from "@/components/LockControls";
 import SummaryCard from "@/components/SummaryCard";
@@ -15,18 +16,18 @@ type League = {
   season: number;
   week: number;
   locksAt: string;
-  payer: string | null;
-  payerReason: string;
-  roster: string[];
 };
 
 export default function ParlayBoard({
   league,
+  roster,
   initialLegs,
   initialParlay,
   initialError,
 }: {
   league: League;
+  /** Active participants, from the database. Managed on /manage. */
+  roster: string[];
   initialLegs: Leg[];
   initialParlay: Parlay;
   initialError?: string;
@@ -38,18 +39,17 @@ export default function ParlayBoard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
 
-  const total = league.roster.length;
+  const total = roster.length;
   const submittedNames = legs.map((leg) => leg.name);
 
-  // Both name lists on the board read alphabetically. Sorting here rather than
-  // in LEAGUE.roster or the query keeps league order as the stored data, and
-  // keeps a leg from jumping to the bottom of the list after it is edited.
+  // Both name lists on the board read alphabetically. The roster arrives that
+  // way; legs are sorted here so one doesn't jump to the bottom after an edit.
   const byName = (a: string, b: string) => a.localeCompare(b);
   const sortedLegs = useMemo(
     () => [...legs].sort((a, b) => byName(a.name, b.name)),
     [legs],
   );
-  const waiting = league.roster
+  const waiting = roster
     .filter((name) => !submittedNames.includes(name))
     .sort(byName);
   const summary = summarizeParlay(legs.map((leg) => leg.odds));
@@ -79,7 +79,8 @@ export default function ParlayBoard({
         setError(data.error ?? "Something went wrong.");
         // Someone else locked the week while this form was open — reflect it
         // so the board stops offering edits that will be refused.
-        if (res.status === 409) setParlay({ locked: true, lockedAt: null });
+        if (res.status === 409)
+          setParlay((current) => ({ ...current, locked: true }));
         return false;
       }
       setLegs((current) => [
@@ -178,20 +179,12 @@ export default function ParlayBoard({
   return (
     <>
       <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-10 border-b border-hairline bg-app px-5 pt-[22px] pb-3.5 lg:px-10 lg:py-[22px]">
-          <div className="mx-auto flex w-full max-w-[1280px] items-baseline justify-between">
-            <div className="flex items-baseline gap-4">
-              <span className="text-[19px] font-bold tracking-[-0.02em] text-ink lg:text-[22px]">
-                {league.name}
-              </span>
-              <span className="hidden font-mono text-[13px] text-muted lg:inline">
-                Week {league.week} · {league.season} Season
-              </span>
-            </div>
-            <span className="font-mono text-xs text-muted lg:hidden">
-              Week {league.week} · {league.season}
-            </span>
-            {canAdd && (
+        <AppHeader
+          title={league.name}
+          meta={`Week ${league.week} · ${league.season} Season`}
+          metaShort={`Week ${league.week} · ${league.season}`}
+          action={
+            canAdd ? (
               <button
                 type="button"
                 onClick={() => openForm(null)}
@@ -199,9 +192,9 @@ export default function ParlayBoard({
               >
                 {cta}
               </button>
-            )}
-          </div>
-        </header>
+            ) : undefined
+          }
+        />
 
         {/* content-start below lg: the grid is flex-1, so on a short board —
             a locked week with no waiting list — stretched rows would open a
@@ -211,7 +204,7 @@ export default function ParlayBoard({
             canAdd ? "pb-[130px]" : "pb-10"
           }`}
         >
-          <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[104px]">
+          <div className="flex min-w-0 flex-col gap-[18px] lg:sticky lg:top-[143px]">
             <StatusBanner
               status={status}
               legCount={legs.length}
@@ -234,19 +227,21 @@ export default function ParlayBoard({
               onUnlock={() => setLocked(false)}
             />
 
-            {league.payer && (
+            {parlay.payer && (
               <div className="flex items-center gap-2.5 px-0.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#20252a] font-mono text-[11px] font-semibold text-[#b9c2c8]">
-                  {league.payer.charAt(0)}
+                  {parlay.payer.charAt(0)}
                 </span>
                 <div className="flex flex-col gap-px">
                   <span className="text-sm text-ink-3">
-                    {league.payer}
+                    {parlay.payer}
                     {locked ? "'s already paid up" : "'s tab this week"}
                   </span>
-                  <span className="font-mono text-[11px] text-muted-3">
-                    {league.payerReason}
-                  </span>
+                  {parlay.payerReason && (
+                    <span className="font-mono text-[11px] text-muted-3">
+                      {parlay.payerReason}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
