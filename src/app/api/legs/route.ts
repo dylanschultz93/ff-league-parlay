@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { describeDbError } from "@/lib/db";
-import { LEAGUE } from "@/lib/league";
 import { isValidAmericanOdds } from "@/lib/odds";
-import { getParlay, listLegs, upsertLeg } from "@/lib/store";
+import { getParlay, listLegs, listParticipants, upsertLeg } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +28,7 @@ export async function POST(request: Request) {
     odds?: unknown;
   };
 
-  if (typeof name !== "string" || !LEAGUE.roster.includes(name)) {
+  if (typeof name !== "string") {
     return NextResponse.json(
       { error: "Pick a name from the league roster." },
       { status: 400 },
@@ -46,6 +45,16 @@ export async function POST(request: Request) {
   }
 
   try {
+    // The roster is a table now, so this check is a query. A benched name is
+    // as good as an unknown one: they're off this week either way.
+    const roster = await listParticipants();
+    if (!roster.some((person) => person.active && person.name === name)) {
+      return NextResponse.json(
+        { error: "Pick a name from the league roster." },
+        { status: 400 },
+      );
+    }
+
     const leg = await upsertLeg({ name, pick: pick.trim(), odds });
     // upsertLeg refuses to write once the week is locked; it can't say why.
     if (!leg) return lockedError();
@@ -63,7 +72,7 @@ export function lockedError() {
   );
 }
 
-export function dbError(cause: unknown) {
-  console.error("[legs]", cause);
+export function dbError(cause: unknown, tag = "legs") {
+  console.error(`[${tag}]`, cause);
   return NextResponse.json({ error: describeDbError(cause) }, { status: 503 });
 }

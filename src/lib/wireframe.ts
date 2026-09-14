@@ -1,12 +1,11 @@
 /**
- * Placeholder data for the three screens that are still wireframes.
+ * Placeholder data for the two screens that are still wireframes.
  *
- * None of it is real and none of it is stored: `weeks` holds only the lock
- * today, and nothing records a per-person record or an editable roster at all.
- * Each block dies with the screen it feeds, as that screen gets wired up.
+ * None of it is real and none of it is stored: nothing keeps a settled week's
+ * bookkeeping or a per-person record yet. Each block dies with the screen it
+ * feeds, as that screen gets wired up — the management screen took its own
+ * with it.
  */
-
-import { LEAGUE } from "@/lib/league";
 
 export type PastWeek = {
   /** Free text rather than a number — preseason weeks are on the record too. */
@@ -90,19 +89,4 @@ export const PARTICIPANT_STATS: ParticipantStat[] = [
   { name: "Rush", won: 1, lost: 3, avgOdds: 610, weeksPaid: 0 },
   { name: "DK", won: 0, lost: 3, avgOdds: 240, weeksPaid: 1 },
   { name: "Chat", won: 0, lost: 3, avgOdds: 480, weeksPaid: 1 },
-];
-
-export type Participant = {
-  name: string;
-  /** Inactive people stay on the list — benched, not deleted. */
-  active: boolean;
-};
-
-/**
- * The roster as the management screen will hold it: today's hardcoded list,
- * plus one benched name so the screen shows both states.
- */
-export const PARTICIPANTS: Participant[] = [
-  ...LEAGUE.roster.map((name) => ({ name, active: true })),
-  { name: "Kyle", active: false },
 ];

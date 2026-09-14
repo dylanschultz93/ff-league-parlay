@@ -44,24 +44,30 @@ verbatim into `src/app/globals.css`.
 ## How it's put together
 
 - `src/lib/odds.ts` — American ↔ decimal odds conversion and parlay math.
-- `src/lib/league.ts` — roster, current week, and who's paying. Placeholder
-  values for now.
+- `src/lib/league.ts` — league name, season, and current week. The roster and
+  the payer moved into the database; this is what's left that changes by hand.
 - `src/lib/store.ts` — leg and lock queries (Neon Postgres).
 - `src/lib/parlay.ts` — whether the ticket is open, live, won, or lost.
 - `src/lib/db.ts` — lazily-built Neon client and connection-string resolution.
 - `schema.sql` — the `legs` and `weeks` tables. Applied with `npm run db:init`.
 - `src/app/api/legs/` — `GET`/`POST` the week's legs, `PATCH`/`DELETE` one leg.
   `PATCH` also grades a leg (`{ "result": "won" | "lost" | null }`).
-- `src/app/api/parlay/` — `GET` the week's lock state, `PATCH` to lock/unlock.
+- `src/app/api/parlay/` — `GET` the week's lock state and payer, `PATCH` to
+  lock/unlock or to set the payer (`{ "payer": "Chat", "payerReason": "…" }`,
+  or `{ "payer": null }` to clear it).
+- `src/app/api/participants/` — `GET`/`POST` the roster, `PATCH` one person's
+  `active` flag, `DELETE` to take them off the list.
 - `src/components/ParlayBoard.tsx` — the board: summary, progress, legs, waiting.
 - `src/components/AddLegView.tsx` — full-screen submit/edit view.
 - `src/components/LockControls.tsx` — locking the ticket, and taking it back.
 - `src/components/AppHeader.tsx` / `NavTabs.tsx` — the bar and tabs every screen
   sits under. `PageShell.tsx` pairs the header with the body the non-board
   screens share.
-- `src/app/history/`, `src/app/stats/`, `src/app/manage/` — past weeks,
-  participant records, and roster/payer management. **Wireframes so far** — they
-  render from `src/lib/wireframe.ts` and nothing on them writes anything.
+- `src/app/manage/` + `src/components/ManageBoard.tsx` — setting the week's
+  payer and managing the roster. Both write to the database.
+- `src/app/history/`, `src/app/stats/` — past weeks and participant records.
+  **Wireframes so far** — they render from `src/lib/wireframe.ts` and nothing
+  on them writes anything.
 - `prototype/` — the exported Claude Design bundle the UI is built from.
 
 One leg per person: submitting again under the same name replaces that person's
@@ -100,21 +106,26 @@ string points at — `parlay_dev` locally, and `neondb` with `db:init:prod`. It 
 re-runnable, so it doubles as the migration step for a schema change.
 
 Rows carry `season` and `week`, and every query is scoped to the current week
-from `src/lib/league.ts`. `weeks` holds one row per week, created when the
-parlay is locked — no row, or a null `locked_at`, means the week is still open.
+from `src/lib/league.ts`. `weeks` holds one row per week, created the first time
+anyone locks the parlay or names a payer — so the row existing does not mean the
+week is locked, only a non-null `locked_at` does.
+
+`participants` is the roster. It seeds itself from `schema.sql` with the names
+that used to be hardcoded in `src/lib/league.ts`, once, guarded so that a
+re-run against a populated table does nothing. Benched people (`active` false)
+keep their legs but drop off the week's waiting list.
 Past weeks accumulate untouched, ready for the history screen. A unique index on `(season, week, lower(name))` enforces one leg per
 person per week and backs the upsert.
 
 ## Also still to come
 
 - **No auth.** Anyone with the link can submit, edit, or delete as anyone.
-- **The new screens are drawings.** `/history`, `/stats`, and `/manage` have the
-  navigation and the layout but no data behind them — every number comes from
-  `src/lib/wireframe.ts` and every control is inert. Wiring them up means
-  a settled week's bookkeeping on the `weeks` table (which holds only the lock
-  today), a per-person record, and a roster that lives somewhere other than
-  `src/lib/league.ts`.
+- **`/history` and `/stats` are drawings.** They have the navigation and the
+  layout but no data behind them — every number comes from
+  `src/lib/wireframe.ts` and every control is inert. Wiring them up means a
+  settled week's bookkeeping on the `weeks` table and a per-person record,
+  neither of which is stored yet.
 - **The deadline isn't enforced.** "locks Sunday 1:00" is still copy — locking
   is a button someone presses, not a clock.
-- **`LEAGUE.payer` is null**, so the "whose tab" callout is hidden until we know
-  who finished last.
+- **Nobody's on the hook until someone says so.** The payer starts null each
+  week and the "whose tab" callout stays hidden until it's set on `/manage`.
