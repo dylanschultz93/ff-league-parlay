@@ -12,7 +12,7 @@ import {
   settled,
   type ParlayStatus,
 } from "@/lib/parlay";
-import type { ArchivedWeek, PersonRecord } from "@/lib/store";
+import type { ArchivedWeek, PersonLeg, PersonRecord } from "@/lib/store";
 
 /**
  * Turning stored weeks and legs into the two screens that look backwards.
@@ -121,8 +121,9 @@ export type PersonStat = {
   lost: number;
   /** Legs with a result. The denominator of the hit rate. */
   graded: number;
-  /** Every leg submitted, graded or not. */
-  legs: number;
+  /** Every leg submitted, graded or not, newest week first. */
+  legs: PersonLeg[];
+  legCount: number;
   hitRate: number;
   /** Null until they've put up a leg. */
   avgOdds: number | null;
@@ -131,21 +132,25 @@ export type PersonStat = {
 };
 
 export function statFor(record: PersonRecord): PersonStat {
-  const graded = record.won + record.lost;
+  const won = record.legs.filter((leg) => leg.result === "won").length;
+  const lost = record.legs.filter((leg) => leg.result === "lost").length;
+  const odds = record.legs.map((leg) => leg.odds);
+  const graded = won + lost;
 
   return {
     name: record.name,
     active: record.active,
-    won: record.won,
-    lost: record.lost,
+    won,
+    lost,
     graded,
-    legs: record.odds.length,
-    hitRate: graded === 0 ? 0 : record.won / graded,
-    avgOdds: meanOdds(record.odds),
-    longestOdds: record.odds.reduce<number | null>(
-      (longest, odds) =>
-        longest === null || americanToDecimal(odds) > americanToDecimal(longest)
-          ? odds
+    legs: record.legs,
+    legCount: record.legs.length,
+    hitRate: graded === 0 ? 0 : won / graded,
+    avgOdds: meanOdds(odds),
+    longestOdds: odds.reduce<number | null>(
+      (longest, next) =>
+        longest === null || americanToDecimal(next) > americanToDecimal(longest)
+          ? next
           : longest,
       null,
     ),
@@ -191,7 +196,7 @@ export function rank(people: PersonStat[], sort: SortKey): PersonStat[] {
 
   switch (sort) {
     case "legs":
-      return ranked.sort((a, b) => b.legs - a.legs || byName(a, b));
+      return ranked.sort((a, b) => b.legCount - a.legCount || byName(a, b));
     case "longest":
       return ranked.sort(
         (a, b) => reach(b.longestOdds) - reach(a.longestOdds) || byName(a, b),

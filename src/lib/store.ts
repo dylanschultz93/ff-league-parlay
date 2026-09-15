@@ -477,59 +477,95 @@ export type PersonRecord = {
   name: string;
   /** True on the roster, false benched, null no longer on it at all. */
   active: boolean | null;
-  won: number;
-  lost: number;
-  /** Every leg they have submitted, graded or not, oldest first. */
-  odds: number[];
+  /** Every leg they have submitted, graded or not, newest week first. */
+  legs: PersonLeg[];
   weeksPaid: number;
 };
 
-type RecordRow = {
+/** One leg on a person's record, carrying the week it was put up on. */
+export type PersonLeg = {
+  id: string;
+  season: number;
+  week: number;
+  pick: string;
+  odds: number;
+  result: LegResult | null;
+};
+
+type PersonRow = {
+  key: string;
   name: string;
   active: boolean | null;
-  won: number | string;
-  lost: number | string;
-  odds: (number | string)[];
   weeks_paid: number | string;
 };
 
-export async function listRecords(): Promise<PersonRecord[]> {
-  const rows = (await db()`
-    with everyone as (
-      select lower(name) as key, min(name) as fallback
-        from (
-               select name from legs
-               union all
-               select name from participants
-               union all
-               select payer as name from weeks where payer is not null
-             ) named
-       group by lower(name)
-    )
-    select coalesce(p.name, e.fallback)                          as name,
-           p.active                                              as active,
-           count(l.id) filter (where l.result = 'won')           as won,
-           count(l.id) filter (where l.result = 'lost')          as lost,
-           coalesce(
-             array_agg(l.odds order by l.season, l.week, l.created_at)
-               filter (where l.id is not null),
-             '{}'::integer[]
-           )                                                     as odds,
-           (select count(*) from weeks w where lower(w.payer) = e.key)
-                                                                 as weeks_paid
-      from everyone e
-      left join participants p on lower(p.name) = e.key
-      left join legs l on lower(l.name) = e.key
-     group by e.key, e.fallback, p.name, p.active
-  `) as RecordRow[];
+type PersonLegRow = {
+  id: string;
+  key: string;
+  season: number | string;
+  week: number | string;
+  pick: string;
+  odds: number | string;
+  result: string | null;
+};
 
-  return rows.map((row) => ({
-    name: row.name,
-    active: row.active,
-    // count() is a bigint, which the driver hands back as a string.
-    won: Number(row.won),
-    lost: Number(row.lost),
-    odds: row.odds.map(Number),
-    weeksPaid: Number(row.weeks_paid),
-  }));
+/**
+ * Two queries rather than one aggregate: the legs come back whole so the stats
+ * screen can open a person up and show them, and counting them here instead of
+ * in SQL keeps one definition of what a record is — the one in lib/archive.ts.
+ */
+export async function listRecords(): Promise<PersonRecord[]> {
+  const [peopleRows, legRows] = (await Promise.all([
+    db()`
+      with everyone as (
+        select lower(name) as key, min(name) as fallback
+          from (
+                 select name from legs
+                 union all
+                 select name from participants
+                 union all
+                 select payer as name from weeks where payer is not null
+               ) named
+         group by lower(name)
+      )
+      select e.key                                    as key,
+             coalesce(p.name, e.fallback)             as name,
+             p.active                                 as active,
+             (select count(*) from weeks w where lower(w.payer) = e.key)
+                                                      as weeks_paid
+        from everyone e
+        left join participants p on lower(p.name) = e.key
+    `,
+    db()`
+      select id, season, week, lower(name) as key, pick, odds, result
+        from legs
+       order by season desc, week desc, created_at desc
+    `,
+  ])) as [PersonRow[], PersonLegRow[]];
+
+  const records = new Map<string, PersonRecord>();
+  for (const row of peopleRows) {
+    records.set(row.key, {
+      name: row.name,
+      active: row.active,
+      legs: [],
+      // count() is a bigint, which the driver hands back as a string.
+      weeksPaid: Number(row.weeks_paid),
+    });
+  }
+
+  for (const row of legRows) {
+    // Every leg's name is one of the three sets `everyone` unions, so the
+    // person is always already here.
+    records.get(row.key)?.legs.push({
+      id: row.id,
+      season: Number(row.season),
+      week: Number(row.week),
+      pick: row.pick,
+      odds: Number(row.odds),
+      result: (row.result as LegResult | null) ?? null,
+    });
+  }
+
+  return [...records.values()];
 }
