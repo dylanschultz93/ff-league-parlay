@@ -90,9 +90,10 @@ that: it does nothing once anyone is on the list.
 - **Odds math lives in `src/lib/odds.ts`.** It's pure and easy to reason about.
   If you touch it, work an example by hand and say so in the PR — a wrong
   conversion is not obvious by eye.
-- **`src/lib/league.ts`** holds the season and the current week. Updating the
-  week each week is a config change, not a code change. The roster and the
-  payer are in the database, edited on `/manage`.
+- **Nothing about the league is in code any more.** The roster, the week's
+  payer, and the current week are all rows, all set on `/manage`. Moving the
+  week is the one that re-points every other query in the app — `league_state`
+  is a single row, and each week-scoped statement reads it in a subquery.
 - **There's no auth.** Anyone with the link can submit, edit, or delete as
   anyone. That's a deliberate tradeoff for a 14-person league — just don't build
   on the assumption that a request is trustworthy.

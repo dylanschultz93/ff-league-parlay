@@ -14,7 +14,8 @@ export default function AppHeader({
   action,
 }: {
   title: string;
-  meta: string;
+  /** Left off when the database is unreachable and the week isn't known. */
+  meta?: string;
   /** Shown below lg, where the full meta line doesn't fit. Defaults to `meta`. */
   metaShort?: string;
   action?: React.ReactNode;
@@ -27,13 +28,17 @@ export default function AppHeader({
             <h1 className="text-[19px] font-bold tracking-[-0.02em] text-ink lg:text-[22px]">
               {title}
             </h1>
-            <span className="hidden font-mono text-[13px] text-muted lg:inline">
-              {meta}
-            </span>
+            {meta && (
+              <span className="hidden font-mono text-[13px] text-muted lg:inline">
+                {meta}
+              </span>
+            )}
           </div>
-          <span className="font-mono text-xs text-muted lg:hidden">
-            {metaShort ?? meta}
-          </span>
+          {(metaShort ?? meta) && (
+            <span className="font-mono text-xs text-muted lg:hidden">
+              {metaShort ?? meta}
+            </span>
+          )}
           {action}
         </div>
         <NavTabs />

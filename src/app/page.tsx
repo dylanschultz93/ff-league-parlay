@@ -2,10 +2,12 @@ import ParlayBoard from "@/components/ParlayBoard";
 import { LEAGUE } from "@/lib/league";
 import { describeDbError } from "@/lib/db";
 import {
+  getLeagueState,
   getParlay,
   listLegs,
   listParticipants,
   type Leg,
+  type LeagueState,
   type Parlay,
 } from "@/lib/store";
 
@@ -20,16 +22,20 @@ export default async function Home() {
     payerReason: null,
   };
   let roster: string[] = [];
+  let state: LeagueState | null = null;
   let initialError: string | undefined;
 
   try {
-    const [loadedLegs, loadedParlay, participants] = await Promise.all([
-      listLegs(),
-      getParlay(),
-      listParticipants(),
-    ]);
+    const [loadedLegs, loadedParlay, participants, loadedState] =
+      await Promise.all([
+        listLegs(),
+        getParlay(),
+        listParticipants(),
+        getLeagueState(),
+      ]);
     legs = loadedLegs;
     parlay = loadedParlay;
+    state = loadedState;
     // Benched people aren't waited on — they're off this week by definition.
     roster = participants
       .filter((person) => person.active)
@@ -43,6 +49,7 @@ export default async function Home() {
   return (
     <ParlayBoard
       league={LEAGUE}
+      state={state}
       roster={roster}
       initialLegs={legs}
       initialParlay={parlay}

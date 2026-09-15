@@ -3,16 +3,18 @@ import { ResultChip } from "@/components/LegCard";
 import PageShell from "@/components/PageShell";
 import StatTile from "@/components/StatTile";
 import WireframeNote from "@/components/WireframeNote";
-import { LEAGUE } from "@/lib/league";
+import { currentSeason } from "@/lib/season";
 import { STAKE, formatAmericanOdds, formatMoney } from "@/lib/odds";
 import { PAST_WEEKS, type PastWeek } from "@/lib/wireframe";
 
 export const metadata: Metadata = { title: "Past weeks" };
+export const dynamic = "force-dynamic";
 
-/** Last season — the current one has nothing settled yet. */
-const ARCHIVE_SEASON = LEAGUE.season - 1;
-
-export default function HistoryPage() {
+export default async function HistoryPage() {
+  // Last season — the current one has nothing settled yet. Cosmetic here, so
+  // a database that is down costs the label, not the screen.
+  const season = await currentSeason();
+  const archive = season === null ? null : season - 1;
   // Derived rather than written down: a wireframe that contradicts itself is
   // harder to read than one with nothing in it.
   const cashed = PAST_WEEKS.filter((week) => week.result === "won").length;
@@ -23,8 +25,8 @@ export default function HistoryPage() {
   return (
     <PageShell
       title="Past weeks"
-      meta={`${ARCHIVE_SEASON} Season`}
-      metaShort={`${ARCHIVE_SEASON}`}
+      meta={archive === null ? undefined : `${archive} Season`}
+      metaShort={archive === null ? undefined : `${archive}`}
     >
       <WireframeNote>
         Every settled week, what it paid, and who covered it. The numbers below
@@ -51,9 +53,11 @@ export default function HistoryPage() {
         ))}
       </ul>
 
-      <p className="font-mono text-xs text-muted-3">
-        {LEAGUE.season} weeks land here as each one settles.
-      </p>
+      {season !== null && (
+        <p className="font-mono text-xs text-muted-3">
+          {season} weeks land here as each one settles.
+        </p>
+      )}
     </PageShell>
   );
 }

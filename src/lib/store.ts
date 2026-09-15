@@ -1,5 +1,4 @@
 import { db, isUuid } from "@/lib/db";
-import { LEAGUE } from "@/lib/league";
 
 /** How a leg finished. Null until the parlay is locked and someone grades it. */
 export type LegResult = "won" | "lost";
@@ -60,15 +59,14 @@ function toLeg(row: Row): Leg {
 }
 
 /**
- * Every query is scoped to the current week from LEAGUE, so past weeks stay in
- * the table untouched and are there when the history screen gets built.
+ * Every query is scoped to the current week from `league_state`, so past weeks
+ * stay in the table untouched and are there when the history screen gets built.
  */
 export async function listLegs(): Promise<Leg[]> {
   const rows = (await db()`
     select id, name, pick, odds, result, created_at
       from legs
-     where season = ${LEAGUE.season}
-       and week = ${LEAGUE.week}
+     where (season, week) = (select season, week from league_state)
      order by created_at asc
   `) as Row[];
   return rows.map(toLeg);
@@ -84,8 +82,7 @@ export async function getParlay(): Promise<Parlay> {
   const rows = (await db()`
     select locked_at, payer, payer_reason
       from weeks
-     where season = ${LEAGUE.season}
-       and week = ${LEAGUE.week}
+     where (season, week) = (select season, week from league_state)
   `) as WeekRow[];
   return toParlay(rows[0]);
 }
@@ -114,7 +111,7 @@ export async function setPayer(
 ): Promise<Parlay> {
   const rows = (await db()`
     insert into weeks (season, week, payer, payer_reason)
-    values (${LEAGUE.season}, ${LEAGUE.week}, ${payer}, ${payerReason})
+    select season, week, ${payer}, ${payerReason} from league_state
     on conflict (season, week)
     do update set payer = excluded.payer,
                   payer_reason = excluded.payer_reason,
@@ -131,7 +128,7 @@ export async function setPayer(
 export async function lockParlay(): Promise<Parlay> {
   const rows = (await db()`
     insert into weeks (season, week, locked_at)
-    values (${LEAGUE.season}, ${LEAGUE.week}, now())
+    select season, week, now() from league_state
     on conflict (season, week)
     do update set locked_at = coalesce(weeks.locked_at, now()),
                   updated_at = now()
@@ -151,8 +148,7 @@ export async function unlockParlay(): Promise<Parlay | null> {
     update weeks
        set locked_at = null,
            updated_at = now()
-     where season = ${LEAGUE.season}
-       and week = ${LEAGUE.week}
+     where (season, week) = (select season, week from league_state)
        and not exists (
              select 1
                from legs
@@ -173,13 +169,13 @@ export async function unlockParlay(): Promise<Parlay | null> {
 export async function upsertLeg(input: NewLeg): Promise<Leg | null> {
   const rows = (await db()`
     insert into legs (season, week, name, pick, odds)
-    select ${LEAGUE.season}, ${LEAGUE.week}, ${input.name}, ${input.pick}, ${input.odds}
+    select ls.season, ls.week, ${input.name}, ${input.pick}, ${input.odds}
+      from league_state ls
      where not exists (
              select 1
                from weeks
-              where season = ${LEAGUE.season}
-                and week = ${LEAGUE.week}
-                and locked_at is not null
+              where (weeks.season, weeks.week) = (ls.season, ls.week)
+                and weeks.locked_at is not null
            )
     on conflict (season, week, lower(name))
     do update set pick = excluded.pick,
@@ -257,6 +253,55 @@ export async function deleteLeg(id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/* -- The current week --------------------------------------------------- */
+
+/**
+ * Which week the app is on. Set by hand on /manage — see the `league_state`
+ * table, which every week-scoped query above reads.
+ */
+export type LeagueState = { season: number; week: number };
+
+type StateRow = { season: number; week: number };
+
+const toState = (row: StateRow): LeagueState => ({
+  season: Number(row.season),
+  week: Number(row.week),
+});
+
+export async function getLeagueState(): Promise<LeagueState> {
+  const rows = (await db()`
+    select season, week from league_state
+  `) as StateRow[];
+  // schema.sql seeds this row. An empty table means the schema never applied,
+  // and saying so beats every week-scoped query quietly matching nothing.
+  if (!rows[0]) {
+    throw new Error(
+      "No league_state row — apply schema.sql with `npm run db:init`.",
+    );
+  }
+  return toState(rows[0]);
+}
+
+/**
+ * Move the app to a week. Everything else follows from this: the board, the
+ * payer, and which week a submitted leg lands on. Past weeks keep their rows.
+ */
+export async function setLeagueState(
+  season: number,
+  week: number,
+): Promise<LeagueState> {
+  const rows = (await db()`
+    insert into league_state (season, week)
+    values (${season}, ${week})
+    on conflict (id)
+    do update set season = excluded.season,
+                  week = excluded.week,
+                  updated_at = now()
+    returning season, week
+  `) as StateRow[];
+  return toState(rows[0]);
+}
+
 /* -- Participants ------------------------------------------------------- */
 
 type ParticipantRow = { id: string; name: string; active: boolean };
@@ -323,8 +368,8 @@ export async function removeParticipant(id: string): Promise<RemoveOutcome> {
        and not exists (
              select 1
                from legs
-              where legs.season = ${LEAGUE.season}
-                and legs.week = ${LEAGUE.week}
+              where (legs.season, legs.week)
+                      = (select season, week from league_state)
                 and lower(legs.name) = lower(participants.name)
            )
     returning id
