@@ -382,3 +382,190 @@ export async function removeParticipant(id: string): Promise<RemoveOutcome> {
   `) as unknown[];
   return still.length > 0 ? "has-leg" : "missing";
 }
+
+/* -- The archive -------------------------------------------------------- */
+
+/**
+ * A week that is behind the one the app is on, with the legs that were on it.
+ *
+ * Every other read in this file is pinned to the current week; these two are
+ * the only ones that look back. Nothing here filters on a week being settled —
+ * a week that was advanced past without ever being locked is still part of the
+ * record, and the history screen says so rather than hiding it.
+ */
+export type ArchivedWeek = {
+  season: number;
+  week: number;
+  locked: boolean;
+  lockedAt: string | null;
+  payer: string | null;
+  payerReason: string | null;
+  legs: Leg[];
+};
+
+type ArchiveLegRow = Row & { season: number; week: number };
+type ArchiveWeekRow = WeekRow & { season: number; week: number };
+
+const weekKey = (season: number, week: number) => `${season}-${week}`;
+
+/**
+ * Newest first. Legs and week rows are fetched separately and stitched
+ * together here, because either can exist without the other: a week nobody
+ * locked has legs and no row, and a week where a payer was named before anyone
+ * submitted has a row and no legs.
+ *
+ * Both queries lean on row-wise comparison against `league_state` for "before
+ * now", which orders across a season boundary for free — week 1 of 2027 is
+ * after week 18 of 2026 without the comparison knowing what a season is.
+ */
+export async function listArchivedWeeks(): Promise<ArchivedWeek[]> {
+  const [legRows, weekRows] = (await Promise.all([
+    db()`
+      select id, season, week, name, pick, odds, result, created_at
+        from legs
+       where (season, week) < (select season, week from league_state)
+       order by created_at asc
+    `,
+    db()`
+      select season, week, locked_at, payer, payer_reason
+        from weeks
+       where (season, week) < (select season, week from league_state)
+    `,
+  ])) as [ArchiveLegRow[], ArchiveWeekRow[]];
+
+  const weeks = new Map<string, ArchivedWeek>();
+
+  const openAt = (season: number, week: number): ArchivedWeek => {
+    const key = weekKey(season, week);
+    const existing = weeks.get(key);
+    if (existing) return existing;
+    const created: ArchivedWeek = {
+      season,
+      week,
+      ...OPEN,
+      legs: [],
+    };
+    weeks.set(key, created);
+    return created;
+  };
+
+  for (const row of weekRows) {
+    const season = Number(row.season);
+    const week = Number(row.week);
+    Object.assign(openAt(season, week), toParlay(row));
+  }
+  for (const row of legRows) {
+    openAt(Number(row.season), Number(row.week)).legs.push(toLeg(row));
+  }
+
+  return [...weeks.values()].sort(
+    (a, b) => b.season - a.season || b.week - a.week,
+  );
+}
+
+/**
+ * One row per person who has ever touched the league: everyone on the roster,
+ * everyone who has put up a leg, and everyone who has covered a week. Those
+ * three sets come apart — a leg carries a name rather than a foreign key, so a
+ * person removed from the roster keeps their record here, which is the whole
+ * reason this is built from a union instead of from `participants` alone.
+ *
+ * Unlike the week queries above, nothing is filtered by week: a person's record
+ * is the whole season, the current week included the moment a leg is graded.
+ */
+export type PersonRecord = {
+  name: string;
+  /** True on the roster, false benched, null no longer on it at all. */
+  active: boolean | null;
+  /** Every leg they have submitted, graded or not, newest week first. */
+  legs: PersonLeg[];
+  weeksPaid: number;
+};
+
+/** One leg on a person's record, carrying the week it was put up on. */
+export type PersonLeg = {
+  id: string;
+  season: number;
+  week: number;
+  pick: string;
+  odds: number;
+  result: LegResult | null;
+};
+
+type PersonRow = {
+  key: string;
+  name: string;
+  active: boolean | null;
+  weeks_paid: number | string;
+};
+
+type PersonLegRow = {
+  id: string;
+  key: string;
+  season: number | string;
+  week: number | string;
+  pick: string;
+  odds: number | string;
+  result: string | null;
+};
+
+/**
+ * Two queries rather than one aggregate: the legs come back whole so the stats
+ * screen can open a person up and show them, and counting them here instead of
+ * in SQL keeps one definition of what a record is — the one in lib/archive.ts.
+ */
+export async function listRecords(): Promise<PersonRecord[]> {
+  const [peopleRows, legRows] = (await Promise.all([
+    db()`
+      with everyone as (
+        select lower(name) as key, min(name) as fallback
+          from (
+                 select name from legs
+                 union all
+                 select name from participants
+                 union all
+                 select payer as name from weeks where payer is not null
+               ) named
+         group by lower(name)
+      )
+      select e.key                                    as key,
+             coalesce(p.name, e.fallback)             as name,
+             p.active                                 as active,
+             (select count(*) from weeks w where lower(w.payer) = e.key)
+                                                      as weeks_paid
+        from everyone e
+        left join participants p on lower(p.name) = e.key
+    `,
+    db()`
+      select id, season, week, lower(name) as key, pick, odds, result
+        from legs
+       order by season desc, week desc, created_at desc
+    `,
+  ])) as [PersonRow[], PersonLegRow[]];
+
+  const records = new Map<string, PersonRecord>();
+  for (const row of peopleRows) {
+    records.set(row.key, {
+      name: row.name,
+      active: row.active,
+      legs: [],
+      // count() is a bigint, which the driver hands back as a string.
+      weeksPaid: Number(row.weeks_paid),
+    });
+  }
+
+  for (const row of legRows) {
+    // Every leg's name is one of the three sets `everyone` unions, so the
+    // person is always already here.
+    records.get(row.key)?.legs.push({
+      id: row.id,
+      season: Number(row.season),
+      week: Number(row.week),
+      pick: row.pick,
+      odds: Number(row.odds),
+      result: (row.result as LegResult | null) ?? null,
+    });
+  }
+
+  return [...records.values()];
+}
