@@ -194,3 +194,85 @@ while the games are on — then be clear-eyed that *both* features are blocked o
 the same thing, and neither one is bought with money you are currently spending.
 Tracking at least gets there on one unverified endpoint (ESPN, free). The
 selector's live half needs a paid tier, full stop.
+
+---
+
+# Addendum: can we just read the bet from FanDuel?
+
+Asked later: if the book knows the ticket and grades it, skip all of this —
+have the app read the placed bet, and let the lock screen be "paste an
+identifier". It would preserve free text and dodge the structured-leg work
+entirely. Researched; here is what exists.
+
+## There is no free way in
+
+**FanDuel publishes no consumer API.** No developer program, no OAuth, nothing
+for reading your own bets. The internal endpoints the app uses are undocumented,
+change without notice, and using them is against the terms of service.
+
+**The legitimate path exists and is B2B-priced.** [SharpSports
+BetSync](https://docs.sharpsports.io/docs/overview) is the Plaid-of-sportsbooks:
+the bettor links their book through a hosted UI, and the API returns their bet
+slips. It supports FanDuel. It is **$500/month**. That is not a "maybe later at
+$30" number — it is 16x the paid tier of the odds provider, for a fourteen-person
+group with one $10 ticket a week.
+
+**Consumer trackers are the cheap version, and they are manual.**
+[Pikkit](https://pikkit.com/booksync) does the same syncing for free and will
+export a CSV. But there is no third-party API — the path is a person exporting
+a file and handing it to us, every week. Worth noting these apps monetise by
+aggregating and reselling betting data, which is a real consideration before
+routing the league's bets through one.
+
+**Scraping your own account** is the remaining option, and the honest summary is:
+it is your account and your data, but it means storing FanDuel credentials or a
+session token, in an app that today has **no auth at all** and where anyone with
+the link can act as anyone. Add geofencing, bot detection, and endpoints that
+change without notice. Not recommended, and not because of the scraping.
+
+## The one thing that was not checked
+
+Whether a book's bet feed carries **live in-game leg progress** or only
+**settled** results. FanDuel's own app shows live progress on a bet slip, so the
+data plainly exists somewhere, but nothing here verified that an API exposes it.
+Do not assume the paid path buys live tracking — it may buy the same
+settle-at-game-end behaviour that nflverse gives away.
+
+## But the idea underneath it is the good one
+
+Strip out the API and the insight survives intact: **the placed ticket is the
+authoritative source, and someone is already looking at it when they lock.**
+
+So at lock time, instead of an API call, the person who placed the bet hands the
+app the slip — a screenshot, or a shared-bet link — and the app parses it **once**
+into structured legs. One parse, with a human present to correct it, at the exact
+moment the legs stop changing.
+
+That is strictly better than the structured submit form in the phase 1 plan:
+
+- **Free text survives.** People keep typing prose all week. Structure is derived
+  at lock, not imposed at submit.
+- **No API, no key, no quota, no terms-of-service problem.**
+- **It structures the ticket that was actually placed**, not what someone meant
+  to place — which is the thing an odds selector cannot guarantee either.
+- It produces exactly the input the nflverse settler needs, so **the whole
+  auto-settlement plan lands on top of it unchanged**.
+
+The cost is one LLM call on an image or a URL, which the app does not do today,
+and a confirm-and-edit screen. Call it a session, maybe a session and a half,
+and it replaces phase 1 of the tracking plan rather than adding to it.
+
+**This is worth costing out properly before phase 1 is built**, because it
+changes what phase 1 is.
+
+## Unrelated but you should know
+
+FanDuel shipped [**Pass the Leg**](https://www.fanduel.com/research/introducing-fanduel-s-pass-the-leg-where-you-can-build-a-parlay-with-your-friends)
+in November 2025: an in-app collaborative parlay where each person adds their own
+leg to a shared build. That is this app's premise, shipped by the book.
+
+It is not a straight substitute — in Pass the Leg everyone places and funds their
+own bet, whereas this league puts up **one** $10 ticket paid by whoever finished
+last, which is the part that makes it a league game rather than a group chat. But
+it is worth ten minutes of looking at before building more of this, if only to
+steal the interaction design.
