@@ -100,3 +100,10 @@ create table if not exists league_state (
 insert into league_state (season, week)
 values (2026, 1)
 on conflict (id) do nothing;
+
+-- A phone number per person, for nudging them by text. Read and written only
+-- behind ADMIN_KEY (src/lib/admin.ts): listParticipants deliberately doesn't
+-- select it, so nothing on the open API can hand it out. Stored normalized,
+-- e.g. +15551234567; null means none on file.
+alter table participants
+  add column if not exists phone text;

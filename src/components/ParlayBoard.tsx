@@ -5,7 +5,9 @@ import AddLegView from "@/components/AddLegView";
 import AppHeader from "@/components/AppHeader";
 import LegCard from "@/components/LegCard";
 import LockControls from "@/components/LockControls";
+import NudgeButton from "@/components/NudgeButton";
 import SummaryCard from "@/components/SummaryCard";
+import { nudgeText } from "@/lib/nudge";
 import { formatAmericanOdds, summarizeParlay } from "@/lib/odds";
 import { bustedOn, gradedCount, parlayStatus } from "@/lib/parlay";
 import type { ParlayStatus } from "@/lib/parlay";
@@ -20,6 +22,7 @@ export default function ParlayBoard({
   league,
   state,
   roster,
+  phones,
   initialLegs,
   initialParlay,
   initialError,
@@ -29,6 +32,8 @@ export default function ParlayBoard({
   state: LeagueState | null;
   /** Active participants, from the database. Managed on /manage. */
   roster: string[];
+  /** Numbers by name, for nudging by text. Empty unless this device is unlocked. */
+  phones: Record<string, string>;
   initialLegs: Leg[];
   initialParlay: Parlay;
   initialError?: string;
@@ -169,6 +174,15 @@ export default function ParlayBoard({
     legs.length === 1 && !locked
       ? `Just ${legs[0].name} so far — the parlay is their leg.`
       : undefined;
+  const nudge = (names: string[], url: string) =>
+    nudgeText({ names, week: state?.week, locksAt: league.locksAt, url });
+  // With numbers, "nudge all" goes to everyone who has one, as one group text.
+  // Anyone without falls to their own nudge, which uses the share sheet.
+  const reachable = waiting.filter((name) => phones[name]);
+  const unreachable = waiting.filter((name) => !phones[name]);
+  const hasPhones = Object.keys(phones).length > 0;
+  const nudgeAll = reachable.length > 0 ? reachable : waiting;
+
   const emptyNote = legs.length === 0 ? "Nobody's in yet. First leg sets the line." : undefined;
 
   // Once everyone is in there is nothing to add, and once the ticket is placed
@@ -302,11 +316,23 @@ export default function ParlayBoard({
                 it — a "still waiting on" list would be asking for nothing. */}
             {!locked && waiting.length > 0 && (
               <div className="flex flex-col gap-2">
-                <h2 className="pl-0.5 font-mono text-[11px] tracking-[0.12em] text-faint uppercase">
-                  {legs.length === 0
-                    ? `Waiting on all ${total}`
-                    : "Still waiting on"}
-                </h2>
+                <div className="flex items-baseline justify-between pr-3.5">
+                  <h2 className="pl-0.5 font-mono text-[11px] tracking-[0.12em] text-faint uppercase">
+                    {legs.length === 0
+                      ? `Waiting on all ${total}`
+                      : "Still waiting on"}
+                  </h2>
+                  {/* On an empty board the names are chips with no nudge of
+                      their own, so this is the only way to reach anyone. */}
+                  {(nudgeAll.length > 1 || legs.length === 0) && (
+                    <NudgeButton
+                      label="nudge all"
+                      ariaLabel={`Nudge all ${nudgeAll.length} still waiting`}
+                      phones={reachable.map((name) => phones[name])}
+                      message={(url) => nudge(nudgeAll, url)}
+                    />
+                  )}
+                </div>
                 {legs.length === 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {waiting.map((name) => (
@@ -326,12 +352,21 @@ export default function ParlayBoard({
                         className="flex items-center justify-between rounded-[14px] border border-dashed border-dash px-3.5 py-3"
                       >
                         <span className="text-[15px] text-muted-2">{name}</span>
-                        <span className="font-mono text-xs text-faint-2">
-                          nudge
-                        </span>
+                        <NudgeButton
+                          label="nudge"
+                          ariaLabel={`Nudge ${name}`}
+                          phones={phones[name] ? [phones[name]] : []}
+                          message={(url) => nudge([name], url)}
+                        />
                       </li>
                     ))}
                   </ul>
+                )}
+                {hasPhones && unreachable.length > 0 && (
+                  <p className="pl-0.5 font-mono text-[11px] text-muted-3">
+                    No number for {unreachable.join(", ")} — &ldquo;nudge
+                    all&rdquo; skips them. Add one on /manage.
+                  </p>
                 )}
               </div>
             )}

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import ManageBoard from "@/components/ManageBoard";
 import PageShell from "@/components/PageShell";
+import { adminConfigured, isAdmin } from "@/lib/admin";
 import { describeDbError } from "@/lib/db";
 import {
   getLeagueState,
   getParlay,
   listLegs,
   listParticipants,
+  listPhones,
   type LeagueState,
   type Parlay,
   type Participant,
@@ -25,6 +27,8 @@ export default async function ManagePage() {
   };
   let state: LeagueState | null = null;
   let legCount = 0;
+  const admin = await isAdmin();
+  let phones: Record<string, string> = {};
   let initialError: string | undefined;
 
   try {
@@ -41,6 +45,7 @@ export default async function ManagePage() {
     parlay = loadedParlay;
     state = loadedState;
     legCount = legs.length;
+    if (admin) phones = await listPhones();
   } catch (cause) {
     // Same as the board: render the screen with the failure on it rather than
     // a crash page.
@@ -58,6 +63,9 @@ export default async function ManagePage() {
         initialLegCount={legCount}
         initialParticipants={participants}
         initialParlay={parlay}
+        initialAdmin={admin}
+        initialPhones={phones}
+        adminConfigured={adminConfigured()}
         initialError={initialError}
       />
     </PageShell>
