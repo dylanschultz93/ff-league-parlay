@@ -1,8 +1,10 @@
 /**
- * Nudges go out through whatever the sender already uses — iMessage, SMS,
- * Messenger, the league group chat — by handing the text to the phone's share
- * sheet. The app never sends anything itself: no provider, no phone numbers
- * on file, nobody has to sign up for anything.
+ * Nudges go out from the sender's own phone. The app never sends anything
+ * itself: no provider, and nobody has to sign up for anything.
+ *
+ * With numbers on file (see src/lib/admin.ts) a nudge opens Messages already
+ * addressed and written, so all that's left is Send. Without them it falls
+ * back to the share sheet, and the sender picks who it goes to.
  */
 
 /** Joins names the way a text would: "A", "A and B", "A, B and C". */
@@ -54,4 +56,19 @@ export async function sendNudge(text: string): Promise<NudgeOutcome> {
   } catch {
     return "failed";
   }
+}
+
+/**
+ * A text link with the recipients and message filled in. Apple and Android
+ * disagree on the syntax: Messages on iPhone and Mac wants
+ * `sms://open?addresses=` to start a group and `&body=`, Android takes a
+ * comma-separated list and `?body=`.
+ */
+export function smsHref(phones: string[], body: string): string {
+  const text = encodeURIComponent(body);
+  const apple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+  if (!apple) return `sms:${phones.join(",")}?body=${text}`;
+  return phones.length === 1
+    ? `sms:${phones[0]}&body=${text}`
+    : `sms://open?addresses=${phones.join(",")}&body=${text}`;
 }

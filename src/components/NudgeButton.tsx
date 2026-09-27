@@ -1,34 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import { sendNudge } from "@/lib/nudge";
+import { sendNudge, smsHref } from "@/lib/nudge";
 
 /**
- * A text link that hands a prewritten reminder to the share sheet. Built at
- * click time, not render time, so the link in the message is the page the
- * sender is actually on.
+ * A text link that sends a prewritten reminder. With phone numbers it opens
+ * Messages addressed and ready to send; without, it hands the text to the
+ * share sheet. The message is built at click time, not render time, so the
+ * link in it is the page the sender is actually on.
  */
 export default function NudgeButton({
   label,
   ariaLabel,
+  phones = [],
   message,
 }: {
   label: string;
   ariaLabel?: string;
+  phones?: string[];
   message: (url: string) => string;
 }) {
   const [note, setNote] = useState<string | null>(null);
 
   async function nudge() {
-    const outcome = await sendNudge(message(window.location.origin));
-    const text =
+    const text = message(window.location.origin);
+    if (phones.length > 0) {
+      window.location.href = smsHref(phones, text);
+      return;
+    }
+    const outcome = await sendNudge(text);
+    const shown =
       outcome === "copied"
         ? "copied"
         : outcome === "failed"
           ? "couldn't share"
           : null;
-    setNote(text);
-    if (text) setTimeout(() => setNote(null), 2000);
+    setNote(shown);
+    if (shown) setTimeout(() => setNote(null), 2000);
   }
 
   return (

@@ -353,6 +353,36 @@ export async function setParticipantActive(
 }
 
 /**
+ * Phone numbers, by participant id. Kept out of Participant and out of
+ * listParticipants on purpose: those feed open endpoints, and these are only
+ * for a caller that has checked isAdmin().
+ */
+export async function listPhones(): Promise<Record<string, string>> {
+  const rows = (await db()`
+    select id, phone
+      from participants
+     where phone is not null
+  `) as { id: string; phone: string }[];
+  return Object.fromEntries(rows.map((row) => [row.id, row.phone]));
+}
+
+/** Pass null to take the number off. Returns false if there's no such person. */
+export async function setParticipantPhone(
+  id: string,
+  phone: string | null,
+): Promise<boolean> {
+  if (!isUuid(id)) return false;
+  const rows = await db()`
+    update participants
+       set phone = ${phone},
+           updated_at = now()
+     where id = ${id}::uuid
+    returning id
+  `;
+  return rows.length > 0;
+}
+
+/**
  * Why a removal didn't happen. `has-leg` is the interesting one: legs are
  * keyed by name, not by a foreign key, so dropping someone mid-week would
  * leave a leg on the board belonging to nobody. Bench them instead, or take

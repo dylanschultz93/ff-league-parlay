@@ -22,6 +22,7 @@ export default function ParlayBoard({
   league,
   state,
   roster,
+  phones,
   initialLegs,
   initialParlay,
   initialError,
@@ -31,6 +32,8 @@ export default function ParlayBoard({
   state: LeagueState | null;
   /** Active participants, from the database. Managed on /manage. */
   roster: string[];
+  /** Numbers by name, for nudging by text. Empty unless this device is unlocked. */
+  phones: Record<string, string>;
   initialLegs: Leg[];
   initialParlay: Parlay;
   initialError?: string;
@@ -173,6 +176,12 @@ export default function ParlayBoard({
       : undefined;
   const nudge = (names: string[], url: string) =>
     nudgeText({ names, week: state?.week, locksAt: league.locksAt, url });
+  // With numbers, "nudge all" goes to everyone who has one, as one group text.
+  // Anyone without falls to their own nudge, which uses the share sheet.
+  const reachable = waiting.filter((name) => phones[name]);
+  const unreachable = waiting.filter((name) => !phones[name]);
+  const hasPhones = Object.keys(phones).length > 0;
+  const nudgeAll = reachable.length > 0 ? reachable : waiting;
 
   const emptyNote = legs.length === 0 ? "Nobody's in yet. First leg sets the line." : undefined;
 
@@ -313,11 +322,14 @@ export default function ParlayBoard({
                       ? `Waiting on all ${total}`
                       : "Still waiting on"}
                   </h2>
-                  {waiting.length > 1 && (
+                  {/* On an empty board the names are chips with no nudge of
+                      their own, so this is the only way to reach anyone. */}
+                  {(nudgeAll.length > 1 || legs.length === 0) && (
                     <NudgeButton
                       label="nudge all"
-                      ariaLabel={`Nudge all ${waiting.length} still waiting`}
-                      message={(url) => nudge(waiting, url)}
+                      ariaLabel={`Nudge all ${nudgeAll.length} still waiting`}
+                      phones={reachable.map((name) => phones[name])}
+                      message={(url) => nudge(nudgeAll, url)}
                     />
                   )}
                 </div>
@@ -343,11 +355,18 @@ export default function ParlayBoard({
                         <NudgeButton
                           label="nudge"
                           ariaLabel={`Nudge ${name}`}
+                          phones={phones[name] ? [phones[name]] : []}
                           message={(url) => nudge([name], url)}
                         />
                       </li>
                     ))}
                   </ul>
+                )}
+                {hasPhones && unreachable.length > 0 && (
+                  <p className="pl-0.5 font-mono text-[11px] text-muted-3">
+                    No number for {unreachable.join(", ")} — &ldquo;nudge
+                    all&rdquo; skips them. Add one on /manage.
+                  </p>
                 )}
               </div>
             )}

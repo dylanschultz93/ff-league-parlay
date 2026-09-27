@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { formatPhone } from "@/lib/phone";
 import type { LeagueState, Participant, Parlay } from "@/lib/store";
 
 /**
@@ -17,12 +18,21 @@ export default function ManageBoard({
   initialLegCount,
   initialParticipants,
   initialParlay,
+  initialAdmin,
+  initialPhones,
+  adminConfigured,
   initialError,
 }: {
   initialState: LeagueState | null;
   initialLegCount: number;
   initialParticipants: Participant[];
   initialParlay: Parlay;
+  /** Whether this device has entered ADMIN_KEY, so can see and set numbers. */
+  initialAdmin: boolean;
+  /** Numbers by participant id. Empty unless unlocked. */
+  initialPhones: Record<string, string>;
+  /** False when the deployment has no ADMIN_KEY, so there's nothing to unlock. */
+  adminConfigured: boolean;
   initialError?: string;
 }) {
   const router = useRouter();
@@ -54,6 +64,10 @@ export default function ManageBoard({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
+
+  const [admin, setAdmin] = useState(initialAdmin);
+  const [phones, setPhones] = useState<Record<string, string>>(initialPhones);
+  const [keyDraft, setKeyDraft] = useState("");
 
   const active = participants.filter((person) => person.active);
   const benched = participants.length - active.length;
@@ -161,6 +175,48 @@ export default function ManageBoard({
       body: JSON.stringify({ active }),
     });
     if (!data) setParticipants(snapshot);
+  }
+
+  async function unlock(event: React.FormEvent) {
+    event.preventDefault();
+    const data = await send("/api/admin", {
+      method: "POST",
+      body: JSON.stringify({ key: keyDraft }),
+    });
+    if (!data) return;
+    setPhones(data.phones as Record<string, string>);
+    setAdmin(true);
+    setKeyDraft("");
+    // The board reads the cookie on the server; refresh so going back to it
+    // doesn't show a cached copy from before the unlock.
+    router.refresh();
+  }
+
+  async function lock() {
+    const data = await send("/api/admin", { method: "DELETE" });
+    if (!data) return;
+    setAdmin(false);
+    setPhones({});
+    router.refresh();
+  }
+
+  /** Saved on blur. Clearing the field takes the number off. */
+  async function savePhone(person: Participant, draft: string) {
+    const current = phones[person.id] ?? "";
+    if (draft.trim() === formatPhone(current) || draft.trim() === current)
+      return;
+    const data = await send(`/api/participants/${person.id}/phone`, {
+      method: "PUT",
+      body: JSON.stringify({ phone: draft.trim() === "" ? null : draft }),
+    });
+    if (!data) return;
+    const phone = data.phone as string | null;
+    setPhones((all) => {
+      const next = { ...all };
+      if (phone) next[person.id] = phone;
+      else delete next[person.id];
+      return next;
+    });
   }
 
   async function remove(person: Participant) {
@@ -431,55 +487,67 @@ export default function ManageBoard({
             {participants.map((person) => (
               <li
                 key={person.id}
-                className="flex items-center justify-between gap-3 rounded-[14px] border border-panel-line bg-panel px-3.5 py-3"
+                className="flex flex-col gap-2.5 rounded-[14px] border border-panel-line bg-panel px-3.5 py-3"
               >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    aria-hidden
-                    className="h-[7px] w-[7px] shrink-0 rounded-full"
-                    style={{
-                      background: person.active ? "var(--accent)" : "var(--dim)",
-                    }}
-                  />
-                  <span
-                    className={`truncate text-[15px] ${
-                      person.active ? "text-ink-2" : "text-muted-3"
-                    }`}
-                  >
-                    {person.name}
-                  </span>
-                </div>
-
-                {confirmingId === person.id ? (
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className="font-mono text-[11px] text-muted-3">
-                      Remove?
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      aria-hidden
+                      className="h-[7px] w-[7px] shrink-0 rounded-full"
+                      style={{
+                        background: person.active ? "var(--accent)" : "var(--dim)",
+                      }}
+                    />
+                    <span
+                      className={`truncate text-[15px] ${
+                        person.active ? "text-ink-2" : "text-muted-3"
+                      }`}
+                    >
+                      {person.name}
                     </span>
-                    <RowButton
-                      label="Yes"
-                      danger
-                      onClick={() => remove(person)}
-                      disabled={pending}
-                    />
-                    <RowButton
-                      label="Cancel"
-                      onClick={() => setConfirmingId(null)}
-                    />
                   </div>
-                ) : (
-                  <div className="flex shrink-0 items-center gap-4">
-                    <RowButton
-                      label={person.active ? "Bench" : "Restore"}
-                      onClick={() => setActive(person, !person.active)}
-                      disabled={pending}
-                    />
-                    <RowButton
-                      label="Remove"
-                      danger
-                      onClick={() => setConfirmingId(person.id)}
-                      disabled={pending}
-                    />
-                  </div>
+
+                  {confirmingId === person.id ? (
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="font-mono text-[11px] text-muted-3">
+                        Remove?
+                      </span>
+                      <RowButton
+                        label="Yes"
+                        danger
+                        onClick={() => remove(person)}
+                        disabled={pending}
+                      />
+                      <RowButton
+                        label="Cancel"
+                        onClick={() => setConfirmingId(null)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex shrink-0 items-center gap-4">
+                      <RowButton
+                        label={person.active ? "Bench" : "Restore"}
+                        onClick={() => setActive(person, !person.active)}
+                        disabled={pending}
+                      />
+                      <RowButton
+                        label="Remove"
+                        danger
+                        onClick={() => setConfirmingId(person.id)}
+                        disabled={pending}
+                      />
+                    </div>
+                  )}
+                </div>
+                {admin && (
+                  <PhoneField
+                    // Remount on a saved change so the field shows the
+                    // normalized number rather than what was typed.
+                    key={phones[person.id] ?? ""}
+                    name={person.name}
+                    phone={phones[person.id]}
+                    onSave={(draft) => savePhone(person, draft)}
+                  />
                 )}
               </li>
             ))}
@@ -492,6 +560,48 @@ export default function ManageBoard({
           their past legs stay, and it&apos;s refused while they have a leg on
           this week&apos;s board.
         </p>
+      </Section>
+
+      <Section
+        title="Phone numbers"
+        hint={
+          admin
+            ? "Unlocked on this device. Numbers go under each name above, and nudges on the board open a text ready to send."
+            : "With numbers on file, a nudge opens a text already addressed — all that's left is Send."
+        }
+      >
+        {admin ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[11px] text-muted-3">
+              {participants.filter((person) => phones[person.id]).length} of{" "}
+              {participants.length} on file.
+              Only unlocked devices can see them.
+            </p>
+            <RowButton label="Lock" onClick={lock} disabled={pending} />
+          </div>
+        ) : !adminConfigured ? (
+          <p className="text-[13px] text-muted-2">
+            Set ADMIN_KEY in the Vercel project to turn this on.
+          </p>
+        ) : (
+          <form onSubmit={unlock} className="flex gap-2">
+            <input
+              type="password"
+              value={keyDraft}
+              onChange={(event) => setKeyDraft(event.target.value)}
+              placeholder="Admin key"
+              autoComplete="current-password"
+              className="h-[46px] min-w-0 flex-1 rounded-xl border border-input-line bg-transparent px-3.5 text-[15px] text-ink-2 placeholder:text-faint-2 focus:border-[var(--accent-50)] focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={pending || keyDraft.trim() === ""}
+              className="h-[46px] shrink-0 rounded-xl bg-accent px-5 text-[15px] font-semibold text-app transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              Unlock
+            </button>
+          </form>
+        )}
       </Section>
     </>
   );
@@ -540,6 +650,34 @@ function Field({
       </span>
       {children}
     </div>
+  );
+}
+
+function PhoneField({
+  name,
+  phone,
+  onSave,
+}: {
+  name: string;
+  phone?: string;
+  onSave: (draft: string) => void;
+}) {
+  const [draft, setDraft] = useState(phone ? formatPhone(phone) : "");
+  return (
+    <input
+      type="tel"
+      inputMode="tel"
+      autoComplete="off"
+      aria-label={`${name}'s phone number`}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => onSave(draft)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+      placeholder="Phone number"
+      className="h-10 w-full rounded-xl border border-input-line bg-transparent px-3.5 font-mono text-[14px] text-ink-2 placeholder:text-faint-2 focus:border-[var(--accent-50)] focus:outline-none"
+    />
   );
 }
 

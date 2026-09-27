@@ -58,6 +58,10 @@ verbatim into `src/app/globals.css`.
   or `{ "payer": null }` to clear it).
 - `src/app/api/participants/` — `GET`/`POST` the roster, `PATCH` one person's
   `active` flag, `DELETE` to take them off the list.
+- `src/app/api/admin/` — `POST { "key": "…" }` unlocks phone numbers on this
+  device (sets a cookie), `DELETE` locks it again. See **Nudging** below.
+- `src/app/api/participants/[id]/phone/` — `PUT { "phone": "…" | null }`.
+  Refused unless unlocked.
 - `src/app/api/league/` — `GET` the current week, `PATCH` to move it
   (`{ "season": 2026, "week": 2 }`; either field alone is fine).
 - `src/components/ParlayBoard.tsx` — the board: summary, progress, legs, waiting.
@@ -91,6 +95,24 @@ Unlocking works only while nothing has been graded, which covers the misclick;
 after that, clear the results first. The rules live in SQL rather than only in
 the UI — every write carries a guard on the week's lock state, so a lock landing
 mid-request can't let a late leg through.
+
+## Nudging
+
+Everyone still waiting on the board has a **nudge**, and the list has a
+**nudge all**. Nothing is sent by the app — a nudge opens the sender's own
+Messages, from their own number.
+
+- **With phone numbers** on file, a nudge opens a text already addressed and
+  written; **nudge all** starts one group text to everyone still out. Tap Send.
+- **Without**, it opens the share sheet with the message written, and the
+  sender picks where it goes.
+
+Phone numbers are the one thing behind a password. Set `ADMIN_KEY` in the
+Vercel project (Production and Preview), then enter it once under **Phone
+numbers** on `/manage` — the device stays unlocked for a year, or until
+**Lock**. Only unlocked devices can see or change numbers, or nudge by text.
+Pick a key nobody in the league would guess: everyone else on the app is who
+it keeps the numbers from. Changing `ADMIN_KEY` signs every device out.
 
 ## Storage
 
